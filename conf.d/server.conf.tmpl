@@ -159,8 +159,8 @@ server {
 
 # Ajax redirect
 server {
-	listen       8081 default_server;
+	listen       8080 default_server;
 	server_name  ${NGINX_HOST_AJAX};
 
-	return 301 $scheme://$NGINX_HOST_AJAX_REDIRECT;
+	return 301 http://${NGINX_HOST_AJAX_REDIRECT};
 }
