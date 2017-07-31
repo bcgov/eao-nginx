@@ -156,3 +156,11 @@ server {
 		access_log off;
 	}
 }
+
+# Ajax redirect
+server {
+	listen       8080;
+	server_name  ${NGINX_HOST_AJAX};
+
+	return 301 http://${NGINX_HOST_AJAX_REDIRECT};
+}
