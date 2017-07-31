@@ -48,7 +48,7 @@ server {
 
 
 server {
-	listen       8080 default_server;
+	listen       8080;
 	server_name  ${NGINX_PROXY_HOST};
 
 	# Allows non-standard headers like SMGOV_USERGUID
@@ -155,12 +155,4 @@ server {
 		# No need to log this request, its just noise
 		access_log off;
 	}
-}
-
-# Ajax redirect
-server {
-	listen       8080;
-	server_name  ${NGINX_HOST_AJAX};
-
-	return 301 http://${NGINX_HOST_AJAX_REDIRECT};
 }
