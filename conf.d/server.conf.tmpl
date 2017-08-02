@@ -48,7 +48,7 @@ server {
 
 
 server {
-	listen       8080;
+	listen       8080 default_server;
 	server_name  ${NGINX_PROXY_HOST};
 
 	# Allows non-standard headers like SMGOV_USERGUID
