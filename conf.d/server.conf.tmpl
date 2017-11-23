@@ -155,6 +155,19 @@ server {
 		# No need to log this request, its just noise
 		access_log off;
 	}
+	
+	# For e-guide service
+	location /eguide {
+		proxy_pass ${NGINX_PROXY_EGUIDE};
+
+        	# Ensure HTTP get passed thru
+		proxy_pass_request_headers on;
+
+		# its helpful to cache these responses
+		proxy_cache globalcache;
+		
+		${HTTP_BASIC1}
+	}
 }
 
 # Ajax redirect
