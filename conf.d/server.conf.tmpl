@@ -173,7 +173,7 @@ server {
 # For public site
 server {
 	listen       8080;
-	server_name  www-${NGINX_PROXY_PUBLIC_HOST};
+	server_name  ${NGINX_PROXY_PUBLIC_HOST};
 
 	# Allows non-standard headers like SMGOV_USERGUID
 	ignore_invalid_headers off;
