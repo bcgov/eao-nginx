@@ -419,6 +419,12 @@
       "name": "HTTP_BASIC2",
       "displayName": "HTTP Basic Nginx Config Line",
       "description": "For very simple HTTP Basic authentication, use HTTP_BASIC1 in your nginx config and provide the value here that you want in nginx config, e.g., auth_basic 'restricted'"
+    },
+    {
+      "name": "HTTP_PARSE_DEPLOY_CONFIG",
+      "displayName": "Parse API nginx override configuration",
+      "description": "Enable injection of nginx configs on the parse_mount route.",
+      "value": "client_max_body_size 500M;"
     }
   ]
 }
