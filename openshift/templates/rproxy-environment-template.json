@@ -134,6 +134,10 @@
                     "value": "${NGINX_PROXY_PARSE}"
                   },
                   {
+                    "name": "NGINX_PROXY_EAO_INSPECTIONS",
+                    "value": "${NGINX_PROXY_EAO_INSPECTIONS}"
+                  },
+                  {
                     "name": "NGINX_PROXY_EGUIDE",
                     "value": "${NGINX_PROXY_EGUIDE}"
                   },
@@ -366,6 +370,13 @@
       "displayName": "Parse server location",
       "description": "The default URL to use when proxying requests to the PARSE microservice.",
       "value": "http://parse-server:8080",
+      "required": true
+    },
+    {
+      "name": "NGINX_PROXY_EAO_INSPECTIONS",
+      "displayName": "EAO Inspections WebApp URL",
+      "description": "The default URL to use when proxying requests to the EAO Inspections webapp.",
+      "value": "http://url-to-inspections-app",
       "required": true
     },
     {
