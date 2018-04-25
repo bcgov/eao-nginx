@@ -140,6 +140,17 @@ server {
     proxy_cache globalcache;
   }
 
+  # For eao inspections app
+  location /uploadcentre {
+    proxy_pass ${NGINX_PROXY_EAO_INSPECTIONS};
+
+    # Ensure HTTP get passed thru
+    proxy_pass_request_headers on;
+
+    # its helpful to cache these responses
+    proxy_cache globalcache;
+  }
+
   location / {
     # proxy all traffic to this URL,
     # note the trailing slash strips out the /proxy path on
