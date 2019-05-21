@@ -303,6 +303,18 @@
       "description": ""
     },
     {
+      "name": "NGINX_PROXY_API_PUBLIC_URL",
+      "displayName": "Host that receives incoming web requests",
+      "description": "The default URL to use when proxying requests to the application's API.",
+      "value:": "http://epic-master:3000",
+      "required": true
+    },
+    {
+      "name": "HTTP_API_PUBLIC_DEPLOY_CONFIG",
+      "displayName": "A way to inject nginx params into the config",
+      "description": ""
+    },
+    {
       "name": "NGINX_EXPORT_URL",
       "displayName": "Geo Export Service location",
       "description": "The default URL to use when proxying requests to the GEO-DATA-EXPORT microservice.",
