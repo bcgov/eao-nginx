@@ -11,7 +11,7 @@ server {
   listen       8080;
   server_name  ${NGINX__EPIC_LEGACY_PUBLIC__SERVER_NAME};
 
-  return 301 http://${NGINX__EPIC_LEGACY_PUBLIC__REDIRECT};
+  rewrite ^/(.*)$ http://${NGINX__EPIC_LEGACY_PUBLIC__REDIRECT}/$1 permanent;
 }
 
 #EPIC application server
