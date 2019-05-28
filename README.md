@@ -12,6 +12,6 @@ SITORY_URL=https://github.com/bcgov/eao-nginx -v NGINX_PROXY_URL=http://esm-dev:
 
 ```
 oc process -f https://raw.githubusercontent.com/bcgov/esm-server/master/openshift/templates/rproxy-environment-template.json -v APPLICATION_DOMAIN=esm-master.pathfinder.gov.bc.c
-a -v APP_DEPLOYMENT_TAG=latest -v APP_IMAGE_NAMESPACE=esm APP_IMAGE_NAME=rproxy -v NAME=rproxy-master NGINX_PROXY_HOST=esm-master.pathfinder.gov.bc.ca | oc create -f -
+a -v APP_DEPLOYMENT_TAG=latest -v APP_IMAGE_NAMESPACE=esm APP_IMAGE_NAME=rproxy -v NAME=rproxy-master NGINX__EPIC_ADMIN__SERVER_NAME=esm-master.pathfinder.gov.bc.ca | oc create -f -
 ```
 

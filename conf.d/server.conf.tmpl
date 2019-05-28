@@ -1,7 +1,15 @@
-# For public site
+# Ajax
 server {
   listen       8080;
-  server_name  ${NGINX_PROXY_PUBLIC_HOST};
+  server_name  ${NGINX__AJAX__SERVER_NAME};
+
+  return 301 http://${NGINX__AJAX__REDIRECT};
+}
+
+# EPIC Public
+server {
+  listen       8080;
+  server_name  ${NGINX__EPIC_PUBLIC__SERVER_NAME};
 
   # Allows non-standard headers like SMGOV_USERGUID
   ignore_invalid_headers off;
@@ -16,7 +24,7 @@ server {
     # note the trailing slash strips out the /proxy path on
     # the request to the upstream server
 
-    proxy_pass ${NGINX_PROXY_PASS_PUBLIC};
+    proxy_pass ${NGINX__EPIC_PUBLIC__PROXY__ROOT};
 
     # Ensure HTTP get passed thru
     proxy_pass_request_headers on;
@@ -39,67 +47,61 @@ server {
     # No need to log this request, its just noise
     access_log off;
   }
-}
-
-server {
-  listen       8080;
-  server_name  www-${NGINX_PROXY_HOST};
-
-  # Allows non-standard headers like SMGOV_USERGUID
-  ignore_invalid_headers off;
-
-  # 172.16.0.0/12 is the entire addressable space in the cluster
-  #set_real_ip_from  172.51.0.0/22;
-  #set_real_ip_from  172.51.4.0/22;
-  #real_ip_header    X-Forwarded-For;
-
-  location / {
-    # proxy all traffic to this URL,
-    # note the trailing slash strips out the /proxy path on
-    # the request to the upstream server
-
-    proxy_pass ${NGINX_PROXY_URL_PUBLIC};
-
-    # Ensure HTTP get passed thru
-    proxy_pass_request_headers on;
-
-    # its helpful to cache these responses
-    proxy_cache globalcache;
-
-    # Deploy-time configurable
-    ${HTTP_BASIC}
-  }
+#}
+#
+#server {
+#  listen       8080;
+#  server_name  ${NGINX__EPIC_PUBLIC__SERVER_NAME};
+#
+#  # Allows non-standard headers like SMGOV_USERGUID
+#  ignore_invalid_headers off;
+#
+#  # 172.16.0.0/12 is the entire addressable space in the cluster
+#  #set_real_ip_from  172.51.0.0/22;
+#  #set_real_ip_from  172.51.4.0/22;
+#  #real_ip_header    X-Forwarded-For;
+#
+#  location / {
+#    # proxy all traffic to this URL,
+#    # note the trailing slash strips out the /proxy path on
+#    # the request to the upstream server
+#
+#    proxy_pass ${NGINX__EPIC_PUBLIC__PROXY__ROOT};
+#
+#    # Ensure HTTP get passed thru
+#    proxy_pass_request_headers on;
+#
+#    # its helpful to cache these responses
+#    proxy_cache globalcache;
+#
+#    # Deploy-time configurable
+#    ${HTTP_BASIC}
+#  }
 
   # Cache the lib directory
   location /lib {
-    proxy_pass ${NGINX_PROXY_URL_PUBLIC};
+    proxy_pass ${NGINX__EPIC_PUBLIC__PROXY__ROOT};
     proxy_cache   globalcache;
   }
-
-  # For status of ngnix service
-  location /nginx_status {
-    # Enable Nginx stats
-    stub_status on;
-    # Only allow access from localhost
-    allow 127.0.0.1;
-    # Other request should be denied
-    deny all;
-    # No need to log this request, its just noise
-    access_log off;
-  }
+#
+#  # For status of ngnix service
+#  location /nginx_status {
+#    # Enable Nginx stats
+#    stub_status on;
+#    # Only allow access from localhost
+#    allow 127.0.0.1;
+#    # Other request should be denied
+#    deny all;
+#    # No need to log this request, its just noise
+#    access_log off;
+#  }
 }
 
-# Ajax redirect
-server {
-  listen       8080;
-  server_name  ${NGINX_HOST_AJAX};
 
-  return 301 http://${NGINX_HOST_AJAX_REDIRECT};
-}
-
+#EPIC Admin
 server {
   listen       8080 default_server;
-  server_name  ${NGINX_PROXY_HOST};
+  server_name  ${NGINX__EPIC_ADMIN__SERVER_NAME};
 
   # Allows non-standard headers like SMGOV_USERGUID
   ignore_invalid_headers off;
@@ -115,9 +117,9 @@ server {
     # the request to the upstream server
     
     # Deploy-time configurable
-    ${HTTP_PARSE_DEPLOY_CONFIG}
+    ${NGINX__EPIC_ADMIN__PROXY_DEPLOY_CONFIG__PARSE}
 
-    proxy_pass ${NGINX_PROXY_PARSE};
+    proxy_pass ${NGINX__EPIC_ADMIN__PROXY__PARSE};
 
     # Ensure HTTP get passed thru
     proxy_pass_request_headers on;
@@ -131,7 +133,7 @@ server {
     # note the trailing slash strips out the /proxy path on
     # the request to the upstream server
 
-    proxy_pass ${NGINX_PROXY_PARSE};
+    proxy_pass ${NGINX__EPIC_ADMIN__PROXY__PARSE};
 
     # Ensure HTTP get passed thru
     proxy_pass_request_headers on;
@@ -142,7 +144,7 @@ server {
 
   # For eao inspections app
   location /uploadcentre {
-    proxy_pass ${NGINX_PROXY_EAO_INSPECTIONS};
+    proxy_pass ${NGINX__EPIC_ADMIN__PROXY__UPLOADCENTRE};
 
     # Ensure HTTP get passed thru
     proxy_pass_request_headers on;
@@ -156,7 +158,7 @@ server {
     # note the trailing slash strips out the /proxy path on
     # the request to the upstream server
 
-    proxy_pass ${NGINX_PROXY_URL};
+    proxy_pass ${NGINX__EPIC_ADMIN__PROXY__ROOT};
 
     # Ensure HTTP get passed thru
     proxy_pass_request_headers on;
@@ -173,7 +175,7 @@ server {
     # note the trailing slash strips out the /proxy path on
     # the request to the upstream server
 
-    proxy_pass ${NGINX_PROXY_URL};
+    proxy_pass ${NGINX__EPIC_ADMIN__PROXY__API};
 
     # Ensure HTTP get passed thru
     proxy_pass_request_headers on;
@@ -182,7 +184,7 @@ server {
     proxy_cache globalcache;
 
     # Deploy-time configurable
-    ${HTTP_API_DEPLOY_CONFIG}
+    ${NGINX__EPIC_ADMIN__PROXY_DEPLOY_CONFIG__API}
   }
 
   location /api-public {
@@ -190,7 +192,7 @@ server {
     # note the trailing slash strips out the /proxy path on
     # the request to the upstream server
 
-    proxy_pass ${NGINX_PROXY_API_PUBLIC_URL};
+    proxy_pass ${NGINX__EPIC_ADMIN__PROXY__API_PUBLIC};
 
     # Ensure HTTP get passed thru
     proxy_pass_request_headers on;
@@ -199,7 +201,7 @@ server {
     proxy_cache globalcache;
 
     # Deploy-time configurable
-    ${HTTP_API_PUBLIC_DEPLOY_CONFIG}
+    ${NGINX__EPIC_ADMIN__PROXY_DEPLOY_CONFIG__API_PUBLIC}
   }
 
   location /api/export/ {
@@ -207,7 +209,7 @@ server {
     # note the trailing slash strips out the /proxy path on
     # the request to the upstream server
 
-    proxy_pass ${NGINX_EXPORT_URL};
+    proxy_pass ${NGINX__EPIC_ADMIN__PROXY__API_EXPORT};
 
     # Ensure HTTP get passed thru
     proxy_pass_request_headers on;
@@ -216,7 +218,7 @@ server {
     proxy_cache globalcache;
 
     # Deploy-time configurable
-    ${HTTP_API_EXPORT_DEPLOY_CONFIG}
+    ${NGINX__EPIC_ADMIN__PROXY_DEPLOY_CONFIG__API_EXPORT}
   }
 
   location /api/geocoder/ {
@@ -224,26 +226,26 @@ server {
     # note the trailing slash strips out the /proxy path on
     # the request to the upstream server
 
-    proxy_pass ${NGINX_GEOCODER_URL};
+    proxy_pass ${NGINX__EPIC_ADMIN__PROXY__API_GEOCODER};
 
     # Ensure HTTP get passed thru
     proxy_pass_request_headers on;
 
     # append api key to authenticate with geocoder service
     # if the value is an empty string then this field will not be passed to the proxied server
-    proxy_set_header apikey ${NGINX_GEOCODER_API_KEY};
+    proxy_set_header apikey ${NGINX__EPIC_ADMIN__PROXY_KEY__API_GEOCODER};
 
     # its helpful to cache these responses
     proxy_cache globalcache;
 
     # Deploy-time configurable
     # Allow injecting extra configuration into the location block
-    ${HTTP_API_GEOCODER_DEPLOY_CONFIG}
+    ${NGINX__EPIC_ADMIN__PROXY_DEPLOY_CONFIG__API_GEOCODER}
   }
 
   # Cache the lib directory
   location /lib {
-    proxy_pass ${NGINX_PROXY_URL};
+    proxy_pass ${NGINX__EPIC_ADMIN__PROXY__ROOT};
     proxy_cache   globalcache;
   }
 
@@ -261,7 +263,7 @@ server {
 
   # For e-guide service
   location /eguide {
-    proxy_pass ${NGINX_PROXY_EGUIDE};
+    proxy_pass ${NGINX__EPIC_ADMIN__PROXY__EGUIDE};
 
     # Ensure HTTP get passed thru
     proxy_pass_request_headers on;
