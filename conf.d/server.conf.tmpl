@@ -3,7 +3,7 @@ server {
   listen       8080;
   server_name  ${NGINX__AJAX__SERVER_NAME};
 
-  return 301 http://${NGINX__AJAX__REDIRECT};
+  return 301 https://${NGINX__AJAX__REDIRECT};
 }
 
 # EPIC legacy public URL
@@ -11,7 +11,7 @@ server {
   listen       8080;
   server_name  ${NGINX__EPIC_LEGACY_PUBLIC__SERVER_NAME};
 
-  rewrite ^/(.*)$ http://${NGINX__EPIC_LEGACY_PUBLIC__REDIRECT}/$1 permanent;
+  return 301 https://${NGINX__EPIC_LEGACY_PUBLIC__REDIRECT};
 }
 
 #EPIC application server
