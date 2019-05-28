@@ -175,7 +175,7 @@ server {
     # note the trailing slash strips out the /proxy path on
     # the request to the upstream server
 
-    proxy_pass ${NGINX__EPIC_ADMIN__PROXY__ROOT};
+    proxy_pass ${NGINX__EPIC_ADMIN__PROXY__API};
 
     # Ensure HTTP get passed thru
     proxy_pass_request_headers on;
