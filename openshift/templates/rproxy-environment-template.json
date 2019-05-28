@@ -102,18 +102,6 @@
                     "value": "${PASSWORD1}"
                   },
                   {
-                    "name": "HTTP_BASIC2",
-                    "value": "${HTTP_BASIC2}"
-                  },
-                  {
-                    "name": "USERNAME2",
-                    "value": "${USERNAME2}"
-                  },
-                  {
-                    "name": "PASSWORD2",
-                    "value": "${PASSWORD2}"
-                  },
-                  {
                     "name": "NGINX__AJAX__SERVER_NAME",
                     "value": "${NGINX__AJAX__SERVER_NAME}"
                   },
@@ -122,72 +110,56 @@
                     "value": "${NGINX__AJAX__REDIRECT}"
                   },
                   {
-                    "name": "NGINX__EPIC_PUBLIC__SERVER_NAME",
-                    "value": "${NGINX__EPIC_PUBLIC__SERVER_NAME}"
+                    "name": "NGINX__EPIC_LEGACY_PUBLIC__SERVER_NAME",
+                    "value": "${NGINX__EPIC_LEGACY_PUBLIC__SERVER_NAME}"
                   },
                   {
-                    "name": "NGINX__EPIC_PUBLIC__PROXY__ROOT",
-                    "value": "${NGINX__EPIC_PUBLIC__PROXY__ROOT}"
+                    "name": "NGINX__EPIC_LEGACY_PUBLIC__REDIRECT",
+                    "value": "${NGINX__EPIC_LEGACY_PUBLIC__REDIRECT}"
                   },
                   {
-                    "name": "NGINX__EPIC_ADMIN__SERVER_NAME",
-                    "value": "${NGINX__EPIC_ADMIN__SERVER_NAME}"
+                    "name": "NGINX__EPIC__SERVER_NAME",
+                    "value": "${NGINX__EPIC__SERVER_NAME}"
                   },
                   {
-                    "name": "NGINX__EPIC_ADMIN__PROXY__ROOT",
-                    "value": "${NGINX__EPIC_ADMIN__PROXY__ROOT}"
+                    "name": "NGINX__EPIC__PROXY__ROOT",
+                    "value": "${NGINX__EPIC__PROXY__ROOT}"
                   },
                   {
-                    "name": "NGINX__EPIC_ADMIN__PROXY__API",
-                    "value": "${NGINX__EPIC_ADMIN__PROXY__API}"
+                    "name": "NGINX__EPIC__PROXY__API",
+                    "value": "${NGINX__EPIC__PROXY__API}"
                   },
                   {
-                    "name": "NGINX__EPIC_ADMIN__PROXY_DEPLOY_CONFIG__API",
-                    "value": "${NGINX__EPIC_ADMIN__PROXY_DEPLOY_CONFIG__API}"
+                    "name": "NGINX__EPIC__PROXY__ADMIN",
+                    "value": "${NGINX__EPIC__PROXY__ADMIN}"
                   },
                   {
-                    "name": "NGINX__EPIC_ADMIN__PROXY__API_EXPORT",
-                    "value": "${NGINX__EPIC_ADMIN__PROXY__API_EXPORT}"
+                    "name": "NGINX__EPIC__PROXY__API_PUBLIC",
+                    "value": "${NGINX__EPIC__PROXY__API_PUBLIC}"
                   },
                   {
-                    "name": "NGINX__EPIC_ADMIN__PROXY_DEPLOY_CONFIG__API_EXPORT",
-                    "value": "${NGINX__EPIC_ADMIN__PROXY_DEPLOY_CONFIG__API_EXPORT}"
+                    "name": "NGINX__EPIC__PROXY_DEPLOY_CONFIG__API_PUBLIC",
+                    "value": "${NGINX__EPIC__PROXY_DEPLOY_CONFIG__API_PUBLIC}"
                   },
                   {
-                    "name": "NGINX__EPIC_ADMIN__PROXY__API_GEOCODER",
-                    "value": "${NGINX__EPIC_ADMIN__PROXY__API_GEOCODER}"
+                    "name": "NGINX__EPIC__PROXY__PARSE",
+                    "value": "${NGINX__EPIC__PROXY__PARSE}"
                   },
                   {
-                    "name": "NGINX__EPIC_ADMIN__PROXY_KEY__API_GEOCODER",
-                    "value": "${NGINX__EPIC_ADMIN__PROXY_KEY__API_GEOCODER}"
+                    "name": "NGINX__EPIC__PROXY_DEPLOY_CONFIG__PARSE",
+                    "value": "${NGINX__EPIC__PROXY_DEPLOY_CONFIG__PARSE}"
                   },
                   {
-                    "name": "NGINX__EPIC_ADMIN__PROXY_DEPLOY_CONFIG__API_GEOCODER",
-                    "value": "${NGINX__EPIC_ADMIN__PROXY_DEPLOY_CONFIG__API_GEOCODER}"
+                    "name": "NGINX__EPIC__PROXY__PARSE_DASHBOARD",
+                    "value": "${NGINX__EPIC__PROXY__PARSE_DASHBOARD}"
                   },
                   {
-                    "name": "NGINX__EPIC_ADMIN__PROXY__API_PUBLIC",
-                    "value": "${NGINX__EPIC_ADMIN__PROXY__API_PUBLIC}"
+                    "name": "NGINX__EPIC__PROXY__UPLOADCENTRE",
+                    "value": "${NGINX__EPIC__PROXY__UPLOADCENTRE}"
                   },
                   {
-                    "name": "NGINX__EPIC_ADMIN__PROXY_DEPLOY_CONFIG__API_PUBLIC",
-                    "value": "${NGINX__EPIC_ADMIN__PROXY_DEPLOY_CONFIG__API_PUBLIC}"
-                  },
-                  {
-                    "name": "NGINX__EPIC_ADMIN__PROXY__EGUIDE",
-                    "value": "${NGINX__EPIC_ADMIN__PROXY__EGUIDE}"
-                  },
-                  {
-                    "name": "NGINX__EPIC_ADMIN__PROXY__PARSE",
-                    "value": "${NGINX__EPIC_ADMIN__PROXY__PARSE}"
-                  },
-                  {
-                    "name": "NGINX__EPIC_ADMIN__PROXY_DEPLOY_CONFIG__PARSE",
-                    "value": "${NGINX__EPIC_ADMIN__PROXY_DEPLOY_CONFIG__PARSE}"
-                  },
-                  {
-                    "name": "NGINX__EPIC_ADMIN__PROXY__UPLOADCENTRE",
-                    "value": "${NGINX__EPIC_ADMIN__PROXY__UPLOADCENTRE}"
+                    "name": "NGINX__EPIC__PROXY__EGUIDE",
+                    "value": "${NGINX__EPIC__PROXY__EGUIDE}"
                   }
                 ]
               }
@@ -326,21 +298,6 @@
       "description": "For very simple HTTP Basic authentication, the password of the ONE user"
     },
     {
-      "name": "HTTP_BASIC2",
-      "displayName": "HTTP Basic Nginx Config Line",
-      "description": "For very simple HTTP Basic authentication, use HTTP_BASIC2 in your nginx config and provide the value here that you want in nginx config, e.g., auth_basic 'restricted'"
-    },
-    {
-      "name": "USERNAME2",
-      "displayName": "HTTP Basic Username",
-      "description": "For very simple HTTP Basic authentication, the username of the ONE user"
-    },
-    {
-      "name": "PASSWORD2",
-      "displayName": "HTTP Basic Password",
-      "description": "For very simple HTTP Basic authentication, the password of the ONE user"
-    },
-    {
       "name": "NGINX__AJAX__SERVER_NAME",
       "displayName": "Nginx Proxy Host for Ajax site",
       "description": "The HTTP Header Host value we want to give to the downstream HTTP server",
@@ -351,114 +308,95 @@
       "name": "NGINX__AJAX__REDIRECT",
       "displayName": "Ajax redirect",
       "description": "",
-      "value": "projects.eao.gov.bc.ca/p/ajax-mine/detail",
+      "value": "projects.eao.gov.bc.ca/p/58851197aaecd9001b8227cc/project-details",
       "required": true
     },
     {
-      "name": "NGINX__EPIC_PUBLIC__SERVER_NAME",
-      "displayName": "Nginx Proxy Host",
+      "name": "NGINX__EPIC_LEGACY_PUBLIC__SERVER_NAME",
+      "displayName": "Nginx EPIC Legacy Public Proxy Host",
       "description": "The HTTP Header Host value we want to give to the downstream HTTP server",
       "value": "www-esm-master.pathfinder.gov.bc.ca",
       "required": true
     },
     {
-      "name": "NGINX__EPIC_PUBLIC__PROXY__ROOT",
-      "displayName": "Host that receives incoming www.* requests",
-      "description": "The default URL to use when proxying requests to the PUBLIC microservice.",
-      "value": "http://eao-public:8080",
+      "name": "NGINX__EPIC_LEGACY_PUBLIC__REDIRECT",
+      "displayName": "Nginx EPIC Legacy Public redirect",
+      "description": "",
+      "value": "esm-master.pathfinder.gov.bc.ca",
       "required": true
     },
     {
-      "name": "NGINX__EPIC_ADMIN__SERVER_NAME",
+      "name": "NGINX__EPIC__SERVER_NAME",
       "displayName": "Nginx Proxy Host",
       "description": "The HTTP Header Host value we want to give to the downstream HTTP server",
       "value": "esm-master.pathfinder.gov.bc.ca",
       "required": true
     },
     {
-      "name": "NGINX__EPIC_ADMIN__PROXY__ROOT",
-      "displayName": "Host that receives incoming web requests",
-      "description": "The default URL to use when proxying requests to the application.",
-      "value:": "http://epic-master:3000",
+      "name": "NGINX__EPIC__PROXY__ROOT",
+      "displayName": "Host that receives incoming requests",
+      "description": "The default URL to use when proxying requests to the PUBLIC microservice.",
+      "value": "http://eagle-public:8080",
       "required": true
     },
     {
-      "name": "NGINX__EPIC_ADMIN__PROXY__API",
+      "name": "NGINX__EPIC__PROXY__API",
       "displayName": "Host that receives incoming web requests for API",
       "description": "The default URL to use when proxying requests to the application's API.",
+      "value:": "http://eagle-api:3000",
+      "required": true
+    },
+    {
+      "name": "NGINX__EPIC__PROXY__ADMIN",
+      "displayName": "Host that receives incoming admin requests",
+      "description": "The default URL to use when proxying requests to the PUBLIC microservice.",
+      "value": "http://eagle-admin:8080",
+      "required": true
+    },
+    {
+      "name": "NGINX__EPIC__PROXY__API_PUBLIC",
+      "displayName": "Host that receives incoming legacy API requests",
+      "description": "The default URL to use when proxying requests to the legacy application's API.",
       "value:": "http://epic-master:3000",
       "required": true
     },
     {
-      "name": "NGINX__EPIC_ADMIN__PROXY_DEPLOY_CONFIG__API",
-      "displayName": "A way to inject Nginx params into the config",
-      "description": ""
-    },
-    {
-      "name": "NGINX__EPIC_ADMIN__PROXY__API_EXPORT",
-      "displayName": "Geo Export Service location",
-      "description": "The default URL to use when proxying requests to the GEO-DATA-EXPORT microservice.",
-      "value": "http://eao-geo-service:3000/",
-      "required": true
-    },
-    {
-      "name": "NGINX__EPIC_ADMIN__PROXY_DEPLOY_CONFIG__API_EXPORT",
-      "displayName": "The API Key to authenticate against the GEO-DATA-EXPORT microservice",
-      "description": ""
-    },    
-    {
-      "name": "NGINX__EPIC_ADMIN__PROXY__API_GEOCODER",
-      "displayName": "Geocoder Service location",
-      "description": "The default URL to use when proxying requests to the GEOCODER microservice.",
-      "required": true
-    },
-    {
-      "name": "NGINX__EPIC_ADMIN__PROXY_KEY__API_GEOCODER",
-      "displayName": "The API Key to authenticate against the GEOCODER microservice",
-      "description": ""
-    },
-    {
-      "name": "NGINX__EPIC_ADMIN__PROXY_DEPLOY_CONFIG__API_GEOCODER",
+      "name": "NGINX__EPIC__PROXY_DEPLOY_CONFIG__API_PUBLIC",
       "displayName": "A way to inject nginx params into the config",
       "description": ""
     },
     {
-      "name": "NGINX__EPIC_ADMIN__PROXY__API_PUBLIC",
-      "displayName": "Host that receives incoming web requests",
-      "description": "The default URL to use when proxying requests to the application's API.",
-      "value:": "http://epic-master:3000",
-      "required": true
-    },
-    {
-      "name": "NGINX__EPIC_ADMIN__PROXY_DEPLOY_CONFIG__API_PUBLIC",
-      "displayName": "A way to inject nginx params into the config",
-      "description": ""
-    },
-    {
-      "name": "NGINX__EPIC_ADMIN__PROXY__EGUIDE",
-      "displayName": "EGUIDE Service location",
-      "description": "The default URL to use when proxying requests to the EGUIDE microservice.",
-      "value": "http://eao-internal-guidance:4000",
-      "required": true
-    },
-    {
-      "name": "NGINX__EPIC_ADMIN__PROXY__PARSE",
+      "name": "NGINX__EPIC__PROXY__PARSE",
       "displayName": "Parse server location",
       "description": "The default URL to use when proxying requests to the PARSE microservice.",
       "value": "http://parse-server:8080",
       "required": true
     },
     {
-      "name": "NGINX__EPIC_ADMIN__PROXY_DEPLOY_CONFIG__PARSE",
+      "name": "NGINX__EPIC__PROXY_DEPLOY_CONFIG__PARSE",
       "displayName": "Parse API nginx override configuration",
       "description": "Enable injection of nginx configs on the parse_mount route.",
       "value": "client_max_body_size 500M;"
     },
     {
-      "name": "NGINX__EPIC_ADMIN__PROXY__UPLOADCENTRE",
+      "name": "NGINX__EPIC__PROXY__PARSE_DASHBOARD",
+      "displayName": "Parse-dashboard server location",
+      "description": "The default URL to use when proxying requests to the PARSE microservice.",
+      "value": "http://parse-server:8080",
+      "required": true
+    },
+    {
+      "name": "NGINX__EPIC__PROXY__UPLOADCENTRE",
       "displayName": "EAO Inspections WebApp URL",
       "description": "The default URL to use when proxying requests to the EAO Inspections webapp.",
       "value": "http://url-to-inspections-app",
+      "required": true
+    },
+    {
+      "name": "NGINX__EPIC__PROXY__EGUIDE",
+      "displayName": "EGUIDE Service location",
+      "description": "The default URL to use when proxying requests to the EGUIDE microservice.",
+      "value": "http://eao-internal-guidance:4000",
       "required": true
     }
   ]
