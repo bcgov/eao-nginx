@@ -11,7 +11,7 @@ server {
   listen       8080;
   server_name  ${NGINX__EPIC_LEGACY_PUBLIC__SERVER_NAME};
 
-  return 301 https://${NGINX__EPIC_LEGACY_PUBLIC__REDIRECT};
+  return 301 https://${NGINX__EPIC_LEGACY_PUBLIC__REDIRECT}$request_uri;
 }
 
 # EPIC legacy public URL 2
@@ -19,7 +19,7 @@ server {
   listen       8080;
   server_name  ${NGINX__EPIC_LEGACY_PUBLIC__SERVER_NAME_2};
 
-  return 301 https://${NGINX__EPIC_LEGACY_PUBLIC__REDIRECT};
+  return 301 https://${NGINX__EPIC_LEGACY_PUBLIC__REDIRECT}$request_uri;
 }
 
 # EPIC legacy public URL 3
@@ -27,7 +27,7 @@ server {
   listen       8080;
   server_name  ${NGINX__EPIC_LEGACY_PUBLIC__SERVER_NAME_3};
 
-  return 301 https://${NGINX__EPIC_LEGACY_PUBLIC__REDIRECT};
+  return 301 https://${NGINX__EPIC_LEGACY_PUBLIC__REDIRECT}$request_uri;
 }
 
 # EPIC legacy public URL 4
@@ -35,7 +35,7 @@ server {
   listen       8080;
   server_name  ${NGINX__EPIC_LEGACY_PUBLIC__SERVER_NAME_4};
 
-  return 301 https://${NGINX__EPIC_LEGACY_PUBLIC__REDIRECT};
+  return 301 https://${NGINX__EPIC_LEGACY_PUBLIC__REDIRECT}$request_uri;
 }
 
 #EPIC application server
