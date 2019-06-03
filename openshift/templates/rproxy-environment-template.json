@@ -114,6 +114,18 @@
                     "value": "${NGINX__EPIC_LEGACY_PUBLIC__SERVER_NAME}"
                   },
                   {
+                    "name": "NGINX__EPIC_LEGACY_PUBLIC__SERVER_NAME_2",
+                    "value": "${NGINX__EPIC_LEGACY_PUBLIC__SERVER_NAME_2}"
+                  },
+                  {
+                    "name": "NGINX__EPIC_LEGACY_PUBLIC__SERVER_NAME_3",
+                    "value": "${NGINX__EPIC_LEGACY_PUBLIC__SERVER_NAME_3}"
+                  },
+                  {
+                    "name": "NGINX__EPIC_LEGACY_PUBLIC__SERVER_NAME_4",
+                    "value": "${NGINX__EPIC_LEGACY_PUBLIC__SERVER_NAME_4}"
+                  },
+                  {
                     "name": "NGINX__EPIC_LEGACY_PUBLIC__REDIRECT",
                     "value": "${NGINX__EPIC_LEGACY_PUBLIC__REDIRECT}"
                   },
@@ -316,6 +328,27 @@
       "displayName": "Nginx EPIC Legacy Public Proxy Host",
       "description": "The HTTP Header Host value we want to give to the downstream HTTP server",
       "value": "www-esm-master.pathfinder.gov.bc.ca",
+      "required": true
+    },
+    {
+      "name": "NGINX__EPIC_LEGACY_PUBLIC__SERVER_NAME_2",
+      "displayName": "Nginx EPIC Legacy Public Proxy Host",
+      "description": "The HTTP Header Host value we want to give to the downstream HTTP server",
+      "value": "www.esm-master.pathfinder.gov.bc.ca",
+      "required": true
+    },
+    {
+      "name": "NGINX__EPIC_LEGACY_PUBLIC__SERVER_NAME_3",
+      "displayName": "Nginx EPIC Legacy Public Proxy Host",
+      "description": "The HTTP Header Host value we want to give to the downstream HTTP server",
+      "value": "www-projects.eao.gov.bc.ca",
+      "required": true
+    },
+    {
+      "name": "NGINX__EPIC_LEGACY_PUBLIC__SERVER_NAME_4",
+      "displayName": "Nginx EPIC Legacy Public Proxy Host",
+      "description": "The HTTP Header Host value we want to give to the downstream HTTP server",
+      "value": "www.project.eao.gov.bc.ca",
       "required": true
     },
     {
