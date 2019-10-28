@@ -324,41 +324,6 @@
       "required": true
     },
     {
-      "name": "NGINX__EPIC_LEGACY_PUBLIC__SERVER_NAME",
-      "displayName": "Nginx EPIC Legacy Public Proxy Host",
-      "description": "The HTTP Header Host value we want to give to the downstream HTTP server",
-      "value": "www-esm-master.pathfinder.gov.bc.ca",
-      "required": true
-    },
-    {
-      "name": "NGINX__EPIC_LEGACY_PUBLIC__SERVER_NAME_2",
-      "displayName": "Nginx EPIC Legacy Public Proxy Host",
-      "description": "The HTTP Header Host value we want to give to the downstream HTTP server",
-      "value": "www.esm-master.pathfinder.gov.bc.ca",
-      "required": true
-    },
-    {
-      "name": "NGINX__EPIC_LEGACY_PUBLIC__SERVER_NAME_3",
-      "displayName": "Nginx EPIC Legacy Public Proxy Host",
-      "description": "The HTTP Header Host value we want to give to the downstream HTTP server",
-      "value": "www-projects.eao.gov.bc.ca",
-      "required": true
-    },
-    {
-      "name": "NGINX__EPIC_LEGACY_PUBLIC__SERVER_NAME_4",
-      "displayName": "Nginx EPIC Legacy Public Proxy Host",
-      "description": "The HTTP Header Host value we want to give to the downstream HTTP server",
-      "value": "www.project.eao.gov.bc.ca",
-      "required": true
-    },
-    {
-      "name": "NGINX__EPIC_LEGACY_PUBLIC__REDIRECT",
-      "displayName": "Nginx EPIC Legacy Public redirect",
-      "description": "",
-      "value": "esm-master.pathfinder.gov.bc.ca",
-      "required": true
-    },
-    {
       "name": "NGINX__EPIC__SERVER_NAME",
       "displayName": "Nginx Proxy Host",
       "description": "The HTTP Header Host value we want to give to the downstream HTTP server",
@@ -384,45 +349,6 @@
       "displayName": "Host that receives incoming admin requests",
       "description": "The default URL to use when proxying requests to the PUBLIC microservice.",
       "value": "http://eagle-admin:8080",
-      "required": true
-    },
-    {
-      "name": "NGINX__EPIC__PROXY__API_PUBLIC",
-      "displayName": "Host that receives incoming legacy API requests",
-      "description": "The default URL to use when proxying requests to the legacy application's API.",
-      "value:": "http://epic-master:3000",
-      "required": true
-    },
-    {
-      "name": "NGINX__EPIC__PROXY_DEPLOY_CONFIG__API_PUBLIC",
-      "displayName": "A way to inject nginx params into the config",
-      "description": ""
-    },
-    {
-      "name": "NGINX__EPIC__PROXY__PARSE",
-      "displayName": "Parse server location",
-      "description": "The default URL to use when proxying requests to the PARSE microservice.",
-      "value": "http://parse-server:8080",
-      "required": true
-    },
-    {
-      "name": "NGINX__EPIC__PROXY_DEPLOY_CONFIG__PARSE",
-      "displayName": "Parse API nginx override configuration",
-      "description": "Enable injection of nginx configs on the parse_mount route.",
-      "value": "client_max_body_size 500M;"
-    },
-    {
-      "name": "NGINX__EPIC__PROXY__PARSE_DASHBOARD",
-      "displayName": "Parse-dashboard server location",
-      "description": "The default URL to use when proxying requests to the PARSE microservice.",
-      "value": "http://parse-server:8080",
-      "required": true
-    },
-    {
-      "name": "NGINX__EPIC__PROXY__UPLOADCENTRE",
-      "displayName": "EAO Inspections WebApp URL",
-      "description": "The default URL to use when proxying requests to the EAO Inspections webapp.",
-      "value": "http://url-to-inspections-app",
       "required": true
     },
     {
