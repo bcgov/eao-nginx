@@ -6,14 +6,6 @@ server {
   return 301 https://${NGINX__AJAX__REDIRECT};
 }
 
-# EPIC legacy public URLs
-server {
-  listen       8080;
-  server_name  ${NGINX__EPIC_LEGACY_PUBLIC__SERVER_NAME} ${NGINX__EPIC_LEGACY_PUBLIC__SERVER_NAME_2} ${NGINX__EPIC_LEGACY_PUBLIC__SERVER_NAME_3} ${NGINX__EPIC_LEGACY_PUBLIC__SERVER_NAME_4};
-
-  return 301 https://${NGINX__EPIC_LEGACY_PUBLIC__REDIRECT};
-}
-
 #EPIC application server
 server {
   listen       8080 default_server;
@@ -58,71 +50,12 @@ server {
     proxy_cache globalcache;
   }
 
-  location /api-public {
-    # proxy all traffic to this URL,
-    # note the trailing slash strips out the /proxy path on
-    # the request to the upstream server
-
-    proxy_pass ${NGINX__EPIC__PROXY__API_PUBLIC};
-
-    # Ensure HTTP get passed thru
-    proxy_pass_request_headers on;
-
-    # its helpful to cache these responses
-    proxy_cache globalcache;
-
-    # Deploy-time configurable
-    ${NGINX__EPIC__PROXY_DEPLOY_CONFIG__API_PUBLIC}
-  }
-
   location /admin/ {
     # proxy all traffic to this URL,
     # note the trailing slash strips out the /proxy path on
     # the request to the upstream server
 
     proxy_pass ${NGINX__EPIC__PROXY__ADMIN};
-
-    # Ensure HTTP get passed thru
-    proxy_pass_request_headers on;
-
-    # its helpful to cache these responses
-    proxy_cache globalcache;
-  }
-
-  location /parse {
-    # proxy all traffic to this URL,
-    # note the trailing slash strips out the /proxy path on
-    # the request to the upstream server
-    
-    # Deploy-time configurable
-    ${NGINX__EPIC__PROXY_DEPLOY_CONFIG__PARSE}
-
-    proxy_pass ${NGINX__EPIC__PROXY__PARSE};
-
-    # Ensure HTTP get passed thru
-    proxy_pass_request_headers on;
-
-    # its helpful to cache these responses
-    proxy_cache globalcache;
-  }
-
-  location /parse-dashboard/ {
-    # proxy all traffic to this URL,
-    # note the trailing slash strips out the /proxy path on
-    # the request to the upstream server
-
-    proxy_pass ${NGINX__EPIC__PROXY__PARSE};
-
-    # Ensure HTTP get passed thru
-    proxy_pass_request_headers on;
-
-    # its helpful to cache these responses
-    proxy_cache globalcache;
-  }
-
-  # For eao inspections app
-  location /uploadcentre {
-    proxy_pass ${NGINX__EPIC__PROXY__UPLOADCENTRE};
 
     # Ensure HTTP get passed thru
     proxy_pass_request_headers on;
