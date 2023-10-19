@@ -77,15 +77,15 @@ server {
     ${HTTP_BASIC1}
   }
 
-  location /.well-known/acme-challenge {
-    proxy_pass ${NGINX__EPIC__PROXY__CERTBOT};
-
-    # Ensure HTTP get passed thru
-    proxy_pass_request_headers on;
-
-    # its helpful to cache these responses
-    proxy_cache globalcache;
-  }
+#  location /.well-known/acme-challenge {
+#    proxy_pass ${NGINX__EPIC__PROXY__CERTBOT};
+#
+#    # Ensure HTTP get passed thru
+#    proxy_pass_request_headers on;
+#
+#    # its helpful to cache these responses
+#    proxy_cache globalcache;
+#  }
 
   # Cache the lib directory
   location /lib {
