@@ -53,6 +53,11 @@ server {
     ${HTTP_BASIC2}
   }
 
+  # Redirect SSD fact sheet
+  location = /api/public/document/673fa39fe2d737002260aaef/download/Fact_Sheet_PRGT_Substantial-Start-Determination.pdf {
+    return 301 https://www2.gov.bc.ca/assets/download/F3F5FA681ADD4912B19A8DE62CBB451E;
+  }
+
   location /api {
     # proxy all traffic to this URL,
     # note the trailing slash strips out the /proxy path on
