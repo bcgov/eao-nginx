@@ -58,6 +58,17 @@ server {
     return 301 https://www2.gov.bc.ca/assets/download/F3F5FA681ADD4912B19A8DE62CBB451E;
   }
 
+  # Analytics API - proxies to penguin-analytics service
+  # Used by eagle-public and eagle-admin for anonymous usage tracking
+  location /api/analytics {
+    proxy_pass ${NGINX__EPIC__PROXY__ANALYTICS};
+    proxy_http_version 1.1;
+    proxy_pass_request_headers on;
+    proxy_connect_timeout 5s;
+    proxy_send_timeout 10s;
+    proxy_read_timeout 10s;
+  }
+
   location /api {
     # proxy all traffic to this URL,
     # note the trailing slash strips out the /proxy path on
