@@ -60,8 +60,8 @@ server {
 
   # Analytics API - proxies to penguin-analytics service
   # Used by eagle-public and eagle-admin for anonymous usage tracking
-  location /api/analytics {
-    proxy_pass ${NGINX__EPIC__PROXY__ANALYTICS};
+  location /api/analytics/ {
+    proxy_pass ${NGINX__EPIC__PROXY__ANALYTICS}/analytics;
     proxy_http_version 1.1;
     proxy_pass_request_headers on;
     proxy_connect_timeout 5s;
