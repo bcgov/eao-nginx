@@ -1,0 +1,108 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ include "rproxy.fullname" . }}
+  labels:
+    {{- include "rproxy.labels" . | nindent 4 }}
+  annotations:
+    # Trigger automatic rollout when ImageStreamTag is updated
+    image.openshift.io/triggers: |
+      [{"from":{"kind":"ImageStreamTag","name":"{{ .Values.image.name }}:{{ .Values.image.tag }}","namespace":"{{ .Values.image.namespace }}"},"fieldPath":"spec.template.spec.containers[?(@.name==\"rproxy\")].image"}]
+spec:
+  {{- if not .Values.autoscaling.enabled }}
+  replicas: {{ .Values.replicaCount }}
+  {{- end }}
+  selector:
+    matchLabels:
+      {{- include "rproxy.selectorLabels" . | nindent 6 }}
+  template:
+    metadata:
+      {{- with .Values.podAnnotations }}
+      annotations:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      labels:
+        {{- include "rproxy.selectorLabels" . | nindent 8 }}
+        role: {{ .Values.podLabels.role | default "rproxy-eagle-epic" }}
+        app: {{ .Values.podLabels.app | default "eagle-epic" }}
+    spec:
+      containers:
+        - name: rproxy
+          image: "{{ .Values.image.repository }}:{{ .Values.image.tag }}"
+          imagePullPolicy: {{ .Values.image.pullPolicy }}
+          ports:
+            - name: http
+              containerPort: {{ .Values.service.targetPort }}
+              protocol: TCP
+          livenessProbe:
+            httpGet:
+              path: {{ .Values.probes.liveness.path }}
+              port: http
+            initialDelaySeconds: {{ .Values.probes.liveness.initialDelaySeconds }}
+            periodSeconds: {{ .Values.probes.liveness.periodSeconds }}
+            timeoutSeconds: {{ .Values.probes.liveness.timeoutSeconds }}
+          readinessProbe:
+            httpGet:
+              path: {{ .Values.probes.readiness.path }}
+              port: http
+            initialDelaySeconds: {{ .Values.probes.readiness.initialDelaySeconds }}
+            periodSeconds: {{ .Values.probes.readiness.periodSeconds }}
+            timeoutSeconds: {{ .Values.probes.readiness.timeoutSeconds }}
+          resources:
+            {{- toYaml .Values.resources | nindent 12 }}
+          env:
+            # HTTP Basic Auth configuration
+            - name: HTTP_BASIC
+              value: {{ .Values.httpBasic.directive | quote }}
+            - name: USERNAME
+              value: {{ .Values.httpBasic.username | quote }}
+            - name: PASSWORD
+              value: {{ .Values.httpBasic.password | quote }}
+            - name: HTTP_BASIC1
+              value: {{ .Values.httpBasic.eguide.directive | quote }}
+            - name: USERNAME1
+              value: {{ .Values.httpBasic.eguide.username | quote }}
+            - name: PASSWORD1
+              value: {{ .Values.httpBasic.eguide.password | quote }}
+            - name: HTTP_BASIC2
+              value: {{ .Values.httpBasic.public.directive | quote }}
+            - name: USERNAME2
+              value: {{ .Values.httpBasic.public.username | quote }}
+            - name: PASSWORD2
+              value: {{ .Values.httpBasic.public.password | quote }}
+            # Ajax redirect configuration
+            - name: NGINX__AJAX__SERVER_NAME
+              value: {{ .Values.nginx.ajax.serverName | quote }}
+            - name: NGINX__AJAX__REDIRECT
+              value: {{ .Values.nginx.ajax.redirect | quote }}
+            # EPIC server configuration
+            - name: NGINX__EPIC__SERVER_NAME
+              value: {{ .Values.nginx.epic.serverName | quote }}
+            - name: NGINX__EPIC__PROXY__ROOT
+              value: {{ .Values.nginx.epic.proxy.root | quote }}
+            - name: NGINX__EPIC__PROXY__API
+              value: {{ .Values.nginx.epic.proxy.api | quote }}
+            - name: NGINX__EPIC__PROXY__ADMIN
+              value: {{ .Values.nginx.epic.proxy.admin | quote }}
+            - name: NGINX__EPIC__PROXY__PUBLIC
+              value: {{ .Values.nginx.epic.proxy.public | quote }}
+            - name: NGINX__EPIC__PROXY__EGUIDE
+              value: {{ .Values.nginx.epic.proxy.eguide | quote }}
+            - name: NGINX__EPIC__PROXY__ANALYTICS
+              value: {{ .Values.nginx.epic.proxy.analytics | quote }}
+            - name: NGINX__EPIC__PROXY__CERTBOT
+              value: {{ .Values.nginx.epic.proxy.certbot | quote }}
+            - name: NGINX__EPIC__PROXY_DEPLOY_CONFIG__API_PUBLIC
+              value: {{ .Values.nginx.epic.proxyDeployConfig.apiPublic | quote }}
+      {{- with .Values.nodeSelector }}
+      nodeSelector:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      {{- with .Values.affinity }}
+      affinity:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      {{- with .Values.tolerations }}
+      tolerations:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}

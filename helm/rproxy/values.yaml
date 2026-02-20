@@ -1,0 +1,112 @@
+# Default values for rproxy Helm chart
+# This is a YAML-formatted file.
+# Declare variables to be passed into your templates.
+
+replicaCount: 2
+
+image:
+  repository: image-registry.openshift-image-registry.svc:5000/6cdc9e-tools/rproxy
+  pullPolicy: Always
+  # Overrides the image tag whose default is the chart appVersion.
+  tag: "latest"
+  name: "rproxy"
+  namespace: "6cdc9e-tools"
+
+nameOverride: ""
+fullnameOverride: "rproxy"
+
+# Pod labels for network policies and service selectors
+podLabels:
+  role: "rproxy-eagle-epic"
+  app: "eagle-epic"
+
+# nginx proxy configuration
+nginx:
+  # Ajax redirect (legacy)
+  ajax:
+    serverName: "ajax.projects.eao.gov.bc.ca"
+    redirect: "projects.eao.gov.bc.ca/p/ajax-mine/detail"
+  
+  # EPIC server configuration
+  epic:
+    serverName: "localhost"
+    proxy:
+      root: "http://eagle-public:8080"
+      api: "http://eagle-api:3000"
+      admin: "http://eagle-admin:8080"
+      public: "http://eagle-public:8080"
+      eguide: "http://eagle-api:3000"
+      analytics: "http://penguin-analytics-api:3000"
+      certbot: "http://certbot:8080"
+    proxyDeployConfig:
+      apiPublic: "proxy_connect_timeout 600; proxy_send_timeout 600; proxy_read_timeout 600;"
+
+# HTTP Basic Authentication settings
+httpBasic:
+  # Main endpoint auth (leave empty to disable)
+  enabled: false
+  directive: ""
+  username: ""
+  password: ""
+  
+  # E-guide endpoint auth (HTTP_BASIC1)
+  eguide:
+    enabled: false
+    directive: ""
+    username: ""
+    password: ""
+  
+  # Public endpoint auth (HTTP_BASIC2)
+  public:
+    enabled: false
+    directive: ""
+    username: ""
+    password: ""
+
+service:
+  type: ClusterIP
+  port: 8080
+  targetPort: 8080
+
+route:
+  enabled: true
+  host: ""
+  path: /
+  tls:
+    enabled: true
+    termination: edge
+    insecureEdgeTerminationPolicy: Redirect
+
+resources:
+  limits:
+    cpu: 250m
+    memory: 150Mi
+  requests:
+    cpu: 30m
+    memory: 50Mi
+
+probes:
+  liveness:
+    path: /nginx_status
+    initialDelaySeconds: 10
+    periodSeconds: 30
+    timeoutSeconds: 5
+  readiness:
+    path: /nginx_status
+    initialDelaySeconds: 5
+    periodSeconds: 10
+    timeoutSeconds: 3
+
+autoscaling:
+  enabled: false
+  minReplicas: 2
+  maxReplicas: 10
+  targetCPUUtilizationPercentage: 80
+
+nodeSelector: {}
+
+tolerations: []
+
+affinity: {}
+
+podAnnotations: {}

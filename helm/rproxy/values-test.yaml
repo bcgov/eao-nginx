@@ -1,0 +1,62 @@
+# Test environment values for rproxy
+replicaCount: 2
+
+image:
+  tag: "test"
+
+nginx:
+  epic:
+    serverName: "epic-6cdc9e-test.apps.silver.devops.gov.bc.ca test.projects.eao.gov.bc.ca"
+    proxy:
+      root: "http://eagle-public:8080"
+      api: "http://eagle-api:3000"
+      admin: "http://eagle-admin:8080"
+      public: "http://eagle-public:8080"
+      eguide: "http://eagle-api:3000"
+      analytics: "http://penguin-analytics-api:3000"
+      certbot: "http://certbot:8080"
+    proxyDeployConfig:
+      apiPublic: "proxy_connect_timeout 600; proxy_send_timeout 600; proxy_read_timeout 600; send_timeout 600;client_max_body_size 500M; if ($http_origin ~ '^https?://(.*\\.gov\\.bc\\.ca)') {add_header 'Access-Control-Allow-Origin' \"$http_origin\" always; add_header 'Access-Control-Allow-Credentials' 'true' always; add_header 'Access-Control-Allow-Methods' 'GET, POST, PUT, DELETE, OPTIONS' always; add_header 'Access-Control-Allow-Headers' 'Accept,Authorization,Cache-Control,Content-Type,DNT,If-Modified-Since,Keep-Alive,Origin,User-Agent,X-Requested-With' always; }"
+
+httpBasic:
+  enabled: true
+  directive: "auth_basic \"Restricted Content\"; auth_basic_user_file /tmp/.htpasswd;"
+  # Credentials injected via GitHub secrets - do NOT hardcode
+  username: ""
+  password: ""
+  
+  eguide:
+    enabled: false
+    directive: ""
+    username: ""
+    password: ""
+  
+  public:
+    enabled: true
+    directive: "auth_basic \"Restricted Content\"; auth_basic_user_file /tmp/.htpasswd2;"
+    username: ""
+    password: ""
+
+# Test-specific server block configuration
+nginxTest:
+  serverName: "test.projects.eao.gov.bc.ca"
+  proxy:
+    root: "http://eagle-public:8080"
+    api: "http://eagle-api:3000"
+    admin: "http://eagle-admin:8080"
+    public: "http://eagle-public:8080"
+    analytics: "http://penguin-analytics-api:3000"
+  proxyDeployConfig:
+    apiPublic: "proxy_connect_timeout 600; proxy_send_timeout 600; proxy_read_timeout 600;"
+
+route:
+  enabled: false  # Route already exists, managed separately
+  host: eagle-test.apps.silver.devops.gov.bc.ca
+
+resources:
+  limits:
+    cpu: 50m
+    memory: 50Mi
+  requests:
+    cpu: 30m
+    memory: 25Mi

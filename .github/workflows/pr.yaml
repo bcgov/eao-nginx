@@ -1,0 +1,81 @@
+name: PR Checks
+
+on:
+  pull_request:
+    branches:
+      - develop
+      - master
+
+permissions: read-all
+
+jobs:
+  validate:
+    name: Validate Configuration
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Validate nginx config template
+        run: |
+          # Check server.conf.tmpl exists
+          if [ ! -f conf.d/server.conf.tmpl ]; then
+            echo "Error: conf.d/server.conf.tmpl not found"
+            exit 1
+          fi
+          
+          # Check for required variables in template
+          REQUIRED_VARS=(
+            "NGINX__EPIC__PROXY__ROOT"
+            "NGINX__EPIC__PROXY__API"
+            "NGINX__EPIC__PROXY__ADMIN"
+            "NGINX__EPIC__PROXY__ANALYTICS"
+          )
+          
+          for var in "${REQUIRED_VARS[@]}"; do
+            if ! grep -q "\${$var}" conf.d/server.conf.tmpl; then
+              echo "Error: Required variable $var not found in server.conf.tmpl"
+              exit 1
+            fi
+          done
+          
+          echo "✓ nginx config template validation passed"
+
+      - name: Validate Helm chart
+        run: |
+          # Check Helm chart structure
+          if [ ! -f helm/rproxy/Chart.yaml ]; then
+            echo "Error: helm/rproxy/Chart.yaml not found"
+            exit 1
+          fi
+          
+          if [ ! -f helm/rproxy/values.yaml ]; then
+            echo "Error: helm/rproxy/values.yaml not found"
+            exit 1
+          fi
+          
+          # Lint Helm chart
+          helm lint helm/rproxy
+          
+          echo "✓ Helm chart validation passed"
+
+      - name: Validate Dockerfile
+        run: |
+          # Check Dockerfile exists
+          if [ ! -f Dockerfile ]; then
+            echo "Error: Dockerfile not found"
+            exit 1
+          fi
+          
+          # Check for required elements
+          if ! grep -q "FROM nginx:1.27-alpine" Dockerfile; then
+            echo "Error: Dockerfile must use nginx:1.27-alpine base image"
+            exit 1
+          fi
+          
+          if ! grep -q "EXPOSE 8080" Dockerfile; then
+            echo "Error: Dockerfile must expose port 8080"
+            exit 1
+          fi
+          
+          echo "✓ Dockerfile validation passed"

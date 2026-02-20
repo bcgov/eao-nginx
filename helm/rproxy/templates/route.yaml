@@ -1,0 +1,27 @@
+{{- if .Values.route.enabled -}}
+apiVersion: route.openshift.io/v1
+kind: Route
+metadata:
+  name: {{ include "rproxy.fullname" . }}
+  labels:
+    {{- include "rproxy.labels" . | nindent 4 }}
+  annotations:
+    openshift.io/host.generated: "false"
+spec:
+  host: {{ .Values.route.host }}
+  {{- if .Values.route.path }}
+  path: {{ .Values.route.path }}
+  {{- end }}
+  to:
+    kind: Service
+    name: {{ include "rproxy.fullname" . }}
+    weight: 100
+  port:
+    targetPort: {{ .Values.service.port }}-tcp
+  {{- if .Values.route.tls.enabled }}
+  tls:
+    termination: {{ .Values.route.tls.termination }}
+    insecureEdgeTerminationPolicy: {{ .Values.route.tls.insecureEdgeTerminationPolicy }}
+  {{- end }}
+  wildcardPolicy: None
+{{- end }}
