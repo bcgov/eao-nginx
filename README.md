@@ -29,7 +29,7 @@ docker run -p 8080:8080 \
 
 **Deploy to Dev:**
 ```bash
-# Builds and deploys automatically on push to develop branch
+# Builds and deploys automatically on push to master branch
 # Or manually trigger:
 gh workflow run "Deploy to Dev" --repo bcgov/eao-nginx
 ```
