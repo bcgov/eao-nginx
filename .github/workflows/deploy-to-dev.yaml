@@ -77,6 +77,29 @@ jobs:
             ${{ secrets.OPENSHIFT_REPOSITORY }}/${{ env.OPENSHIFT_NAMESPACE_TOOLS }}/${{ env.IMAGE_NAME }}:ci-latest
             ${{ secrets.OPENSHIFT_REPOSITORY }}/${{ env.OPENSHIFT_NAMESPACE_TOOLS }}/${{ env.IMAGE_NAME }}:${{ needs.scan.outputs.SHORT_SHA }}
 
+      - name: Install OpenShift CLI
+        run: |
+          curl -LO "https://mirror.openshift.com/pub/openshift-v4/clients/ocp/latest/openshift-client-linux.tar.gz"
+          tar -xvzf openshift-client-linux.tar.gz
+          sudo mv oc /usr/local/bin/
+          rm -f openshift-client-linux.tar.gz
+
+      - name: Log into OpenShift
+        uses: redhat-actions/oc-login@v1
+        with:
+          openshift_server_url: ${{ secrets.OPENSHIFT_URL }}
+          openshift_token: ${{ secrets.OPENSHIFT_TOKEN }}
+          namespace: ${{ env.OPENSHIFT_NAMESPACE_TOOLS }}
+
+      - name: Tag images in OpenShift ImageStream
+        run: |
+          echo "Tagging images in OpenShift ImageStream..."
+          oc -n ${{ env.OPENSHIFT_NAMESPACE_TOOLS }} tag \
+            ${{ env.IMAGE_NAME }}:${{ needs.scan.outputs.SHORT_SHA }} ${{ env.IMAGE_NAME }}:dev
+          
+          oc -n ${{ env.OPENSHIFT_NAMESPACE_TOOLS }} tag \
+            ${{ env.IMAGE_NAME }}:${{ needs.scan.outputs.SHORT_SHA }} ${{ env.IMAGE_NAME }}:ci-latest
+
   deploy:
     name: Deploy to Dev
     runs-on: ubuntu-latest
