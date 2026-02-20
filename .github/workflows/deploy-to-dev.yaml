@@ -19,113 +19,63 @@ env:
   APP_NAME: rproxy
 
 jobs:
-  build:
-    name: Build and Push  Image
-    runs-on: ubuntu-latest
-    steps:
-      - name: Checkout
-        uses: actions/checkout@v4
-
-      - name: Install OpenShift CLI
-        run: |
-          curl -LO "https://mirror.openshift.com/pub/openshift-v4/clients/ocp/latest/openshift-client-linux.tar.gz"
-          tar -xvzf openshift-client-linux.tar.gz
-          sudo mv oc /usr/local/bin/
-          rm -f openshift-client-linux.tar.gz
-
-      - name: Log in to OpenShift
-        uses: redhat-actions/oc-login@v1
-        with:
-          openshift_server_url: ${{ secrets.OPENSHIFT_URL }}
-          openshift_token: ${{ secrets.OPENSHIFT_TOKEN }}
-          insecure_skip_tls_verify: true
-          namespace: ${{ env.OPENSHIFT_NAMESPACE_TOOLS }}
-
-      - name: Build Image
-        run: |
-          oc start-build ${{ env.IMAGE_NAME }} \
-            --from-dir=. \
-            --follow \
-            --wait \
-            -n ${{ env.OPENSHIFT_NAMESPACE_TOOLS }}
-
   scan:
-    name: Security Scan
+    name: Build and Scan
     runs-on: ubuntu-latest
-    needs: build
+    outputs:
+      SHORT_SHA: ${{ steps.short-sha.outputs.SHA }}
     steps:
       - name: Checkout
         uses: actions/checkout@v4
 
-      - name: Install OpenShift CLI
-        run: |
-          curl -LO "https://mirror.openshift.com/pub/openshift-v4/clients/ocp/latest/openshift-client-linux.tar.gz"
-          tar -xvzf openshift-client-linux.tar.gz
-          sudo mv oc /usr/local/bin/
-          rm -f openshift-client-linux.tar.gz
+      - name: Get short SHA
+        id: short-sha
+        run: echo "SHA=$(git rev-parse --short HEAD)" >> $GITHUB_OUTPUT
 
-      - name: Log in to OpenShift
-        uses: redhat-actions/oc-login@v1
+      - name: Build Docker image for scanning
+        uses: docker/build-push-action@v6
         with:
-          openshift_server_url: ${{ secrets.OPENSHIFT_URL }}
-          openshift_token: ${{ secrets.OPENSHIFT_TOKEN }}
-          insecure_skip_tls_verify: true
-          namespace: ${{ env.OPENSHIFT_NAMESPACE_TOOLS }}
-
-      - name: Get Image Digest
-        id: get-digest
-        run: |
-          DIGEST=$(oc get istag ${{ env.IMAGE_NAME }}:latest -n ${{ env.OPENSHIFT_NAMESPACE_TOOLS }} -o jsonpath='{.image.metadata.name}')
-          echo "digest=$DIGEST" >> $GITHUB_OUTPUT
-          echo "Image digest: $DIGEST"
+          context: .
+          push: false
+          tags: ${{ env.IMAGE_NAME }}:${{ steps.short-sha.outputs.SHA }}
+          load: true
 
       - name: Run Trivy vulnerability scanner
         uses: aquasecurity/trivy-action@master
         with:
-          scan-type: 'image'
-          image-ref: 'image-registry.openshift-image-registry.svc:5000/${{ env.OPENSHIFT_NAMESPACE_TOOLS }}/${{ env.IMAGE_NAME }}@${{ steps.get-digest.outputs.digest }}'
-          format: 'sarif'
-          output: 'trivy-results.sarif'
-          severity: 'CRITICAL,HIGH'
+          image-ref: ${{ env.IMAGE_NAME }}:${{ steps.short-sha.outputs.SHA }}
+          format: 'table'
           exit-code: '1'
           ignore-unfixed: true
-
-      - name: Upload Trivy results to GitHub Security tab
-        if: always()
-        uses: github/codeql-action/upload-sarif@v3
-        with:
-          sarif_file: 'trivy-results.sarif'
+          vuln-type: 'os,library'
+          severity: 'CRITICAL,HIGH'
 
   push:
-    name: Tag Image for Dev
+    name: Push Image
     runs-on: ubuntu-latest
     needs: scan
+    outputs:
+      SHORT_SHA: ${{ needs.scan.outputs.SHORT_SHA }}
     steps:
-      - name: Install OpenShift CLI
-        run: |
-          curl -LO "https://mirror.openshift.com/pub/openshift-v4/clients/ocp/latest/openshift-client-linux.tar.gz"
-          tar -xvzf openshift-client-linux.tar.gz
-          sudo mv oc /usr/local/bin/
-          rm -f openshift-client-linux.tar.gz
+      - name: Checkout
+        uses: actions/checkout@v4
 
-      - name: Log in to OpenShift
-        uses: redhat-actions/oc-login@v1
+      - name: Login to OpenShift registry
+        uses: docker/login-action@v3
         with:
-          openshift_server_url: ${{ secrets.OPENSHIFT_URL }}
-          openshift_token: ${{ secrets.OPENSHIFT_TOKEN }}
-          insecure_skip_tls_verify: true
-          namespace: ${{ env.OPENSHIFT_NAMESPACE_TOOLS }}
+          registry: ${{ secrets.OPENSHIFT_REPOSITORY }}
+          username: ${{ secrets.OPENSHIFT_REPOSITORY_USERNAME }}
+          password: ${{ secrets.OPENSHIFT_REPOSITORY_PASSWORD }}
 
-      - name: Tag Image
-        run: |
-          # Tag as dev
-          oc tag ${{ env.IMAGE_NAME }}:latest ${{ env.IMAGE_NAME }}:dev -n ${{ env.OPENSHIFT_NAMESPACE_TOOLS }}
-          
-          # Tag as CI latest
-          oc tag ${{ env.IMAGE_NAME }}:latest ${{ env.IMAGE_NAME }}:ci-latest -n ${{ env.OPENSHIFT_NAMESPACE_TOOLS }}
-          
-          # Tag with commit SHA
-          oc tag ${{ env.IMAGE_NAME }}:latest ${{ env.IMAGE_NAME }}:${{ github.sha }} -n ${{ env.OPENSHIFT_NAMESPACE_TOOLS }}
+      - name: Build and push Docker image
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          push: true
+          tags: |
+            ${{ secrets.OPENSHIFT_REPOSITORY }}/${{ env.OPENSHIFT_NAMESPACE_TOOLS }}/${{ env.IMAGE_NAME }}:dev
+            ${{ secrets.OPENSHIFT_REPOSITORY }}/${{ env.OPENSHIFT_NAMESPACE_TOOLS }}/${{ env.IMAGE_NAME }}:ci-latest
+            ${{ secrets.OPENSHIFT_REPOSITORY }}/${{ env.OPENSHIFT_NAMESPACE_TOOLS }}/${{ env.IMAGE_NAME }}:${{ needs.scan.outputs.SHORT_SHA }}
 
   deploy:
     name: Deploy to Dev
