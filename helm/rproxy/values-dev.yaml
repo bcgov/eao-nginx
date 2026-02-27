@@ -11,7 +11,7 @@ nginx:
       root: "http://eagle-public:8080"
       api: "http://eagle-api:3000"
       admin: "http://eagle-admin:8080"
-      public: "http://epic-public:8080/"  # Legacy name with trailing slash
+      public: "http://eagle-public:8080"
       eguide: "http://eagle-api:3000"
       analytics: "http://penguin-analytics-api:3000"
       certbot: "http://certbot:8080"
