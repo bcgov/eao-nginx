@@ -92,6 +92,11 @@ server {
     proxy_cache globalcache;
   }
 
+  # Redirect /admin to /admin/ to avoid port exposure in redirects
+  location = /admin {
+    return 301 $scheme://$host/admin/;
+  }
+
   location /admin/ {
     # proxy all traffic to this URL,
     # note the trailing slash strips out the /proxy path on
