@@ -48,3 +48,27 @@ resources:
   requests:
     cpu: 30m
     memory: 25Mi
+
+# Application configuration served at /config.json
+config:
+  debugMode: false
+  environment: "dev"
+  bannerColour: "#4e8de8"
+  logLevel: 0
+  apiLocation: "https://eagle-dev.apps.silver.devops.gov.bc.ca"
+  apiPath: "/api"
+  apiPublicPath: "/api/public"
+  adminPath: "/admin/"
+  keycloak:
+    clientId: "eagle-api-console"
+    url: "https://dev.loginproxy.gov.bc.ca/auth"
+    realm: "eao-epic"
+    enabled: true
+  analytics:
+    apiUrl: "/analytics"
+    debug: true
+    enhancedTracking: true
+    trafficTracking: true
+  survey:
+    url: null
+    showBanner: false

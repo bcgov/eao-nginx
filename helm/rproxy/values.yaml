@@ -110,3 +110,28 @@ tolerations: []
 affinity: {}
 
 podAnnotations: {}
+
+# Application configuration served at /config.json
+# These are defaults - override in values-{env}.yaml
+config:
+  debugMode: false
+  environment: "local"
+  bannerColour: ""
+  logLevel: 0
+  apiLocation: "http://localhost:3000"
+  apiPath: "/api"
+  apiPublicPath: "/api/public"
+  adminPath: "/admin/"
+  keycloak:
+    clientId: "eagle-api-console"
+    url: "https://dev.loginproxy.gov.bc.ca/auth"
+    realm: "eao-epic"
+    enabled: false
+  analytics:
+    apiUrl: "/analytics"
+    debug: true
+    enhancedTracking: false
+    trafficTracking: false
+  survey:
+    url: null
+    showBanner: false

@@ -69,6 +69,15 @@ server {
     proxy_read_timeout 10s;
   }
 
+  # Runtime-configurable application settings
+  # Served from ConfigMap - edit via 'oc edit configmap eagle-config' for instant changes
+  location = /config.json {
+    alias /etc/nginx/config/config.json;
+    default_type application/json;
+    add_header Cache-Control "no-cache, no-store, must-revalidate";
+    add_header Access-Control-Allow-Origin "*";
+  }
+
   location /api {
     # proxy all traffic to this URL,
     # note the trailing slash strips out the /proxy path on

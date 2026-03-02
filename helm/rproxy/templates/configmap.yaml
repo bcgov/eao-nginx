@@ -1,0 +1,28 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: {{ include "rproxy.fullname" . }}-config
+  labels:
+    {{- include "rproxy.labels" . | nindent 4 }}
+data:
+  config.json: |
+    {
+      "debugMode": {{ .Values.config.debugMode }},
+      "ENVIRONMENT": {{ .Values.config.environment | quote }},
+      "BANNER_COLOUR": {{ .Values.config.bannerColour | quote }},
+      "LOG_LEVEL": {{ .Values.config.logLevel }},
+      "API_LOCATION": {{ .Values.config.apiLocation | quote }},
+      "API_PATH": {{ .Values.config.apiPath | quote }},
+      "API_PUBLIC_PATH": {{ .Values.config.apiPublicPath | quote }},
+      "ADMIN_PATH": {{ .Values.config.adminPath | quote }},
+      "KEYCLOAK_CLIENT_ID": {{ .Values.config.keycloak.clientId | quote }},
+      "KEYCLOAK_URL": {{ .Values.config.keycloak.url | quote }},
+      "KEYCLOAK_REALM": {{ .Values.config.keycloak.realm | quote }},
+      "KEYCLOAK_ENABLED": {{ .Values.config.keycloak.enabled }},
+      "ANALYTICS_API_URL": {{ .Values.config.analytics.apiUrl | quote }},
+      "ANALYTICS_DEBUG": {{ .Values.config.analytics.debug }},
+      "ANALYTICS_ENHANCED_TRACKING": {{ .Values.config.analytics.enhancedTracking }},
+      "ANALYTICS_TRAFFIC_TRACKING": {{ .Values.config.analytics.trafficTracking }},
+      "SURVEY_URL": {{ .Values.config.survey.url | default "null" }},
+      "SHOW_SURVEY_BANNER": {{ .Values.config.survey.showBanner }}
+    }

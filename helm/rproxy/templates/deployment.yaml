@@ -94,6 +94,17 @@ spec:
               value: {{ .Values.nginx.epic.proxy.certbot | quote }}
             - name: NGINX__EPIC__PROXY_DEPLOY_CONFIG__API_PUBLIC
               value: {{ .Values.nginx.epic.proxyDeployConfig.apiPublic | quote }}
+          volumeMounts:
+            - name: config
+              mountPath: /etc/nginx/config
+              readOnly: true
+      volumes:
+        - name: config
+          configMap:
+            name: {{ include "rproxy.fullname" . }}-config
+            items:
+              - key: config.json
+                path: config.json
       {{- with .Values.nodeSelector }}
       nodeSelector:
         {{- toYaml . | nindent 8 }}
