@@ -54,13 +54,11 @@ resources:
 # Application configuration served at /config.json
 # Edit via 'oc edit configmap rproxy-config -n 6cdc9e-prod' for instant changes
 config:
-  debugMode: false
   environment: "prod"
   bannerColour: ""
   logLevel: 4
   apiLocation: "https://projects.eao.gov.bc.ca"
   apiPath: "/api"
-  apiPublicPath: "/api/public"
   adminPath: "/admin/"
   keycloak:
     clientId: "eagle-api-console"

@@ -69,9 +69,10 @@ server {
     proxy_read_timeout 10s;
   }
 
-  # Runtime-configurable application settings
-  # Served from ConfigMap - edit via 'oc edit configmap eagle-config' for instant changes
-  location = /config.json {
+  # Runtime configuration for frontend apps
+  # Served from ConfigMap - edit via 'oc edit configmap rproxy-config' for instant changes
+  # Frontends fetch this on startup to get environment-specific settings
+  location = /api/config {
     alias /etc/nginx/config/config.json;
     default_type application/json;
     add_header Cache-Control "no-cache, no-store, must-revalidate";

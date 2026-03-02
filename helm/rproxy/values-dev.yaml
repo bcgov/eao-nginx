@@ -51,13 +51,11 @@ resources:
 
 # Application configuration served at /config.json
 config:
-  debugMode: false
   environment: "dev"
-  bannerColour: "#4e8de8"
+  bannerColour: "red"
   logLevel: 0
   apiLocation: "https://eagle-dev.apps.silver.devops.gov.bc.ca"
   apiPath: "/api"
-  apiPublicPath: "/api/public"
   adminPath: "/admin/"
   keycloak:
     clientId: "eagle-api-console"

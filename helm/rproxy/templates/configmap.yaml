@@ -7,13 +7,11 @@ metadata:
 data:
   config.json: |
     {
-      "debugMode": {{ .Values.config.debugMode }},
       "ENVIRONMENT": {{ .Values.config.environment | quote }},
       "BANNER_COLOUR": {{ .Values.config.bannerColour | quote }},
       "LOG_LEVEL": {{ .Values.config.logLevel }},
       "API_LOCATION": {{ .Values.config.apiLocation | quote }},
       "API_PATH": {{ .Values.config.apiPath | quote }},
-      "API_PUBLIC_PATH": {{ .Values.config.apiPublicPath | quote }},
       "ADMIN_PATH": {{ .Values.config.adminPath | quote }},
       "KEYCLOAK_CLIENT_ID": {{ .Values.config.keycloak.clientId | quote }},
       "KEYCLOAK_URL": {{ .Values.config.keycloak.url | quote }},

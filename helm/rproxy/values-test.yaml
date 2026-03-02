@@ -63,13 +63,11 @@ resources:
 
 # Application configuration served at /config.json
 config:
-  debugMode: false
   environment: "test"
-  bannerColour: "#ff8c42"
+  bannerColour: "orange"
   logLevel: 0
   apiLocation: "https://eagle-test.apps.silver.devops.gov.bc.ca"
   apiPath: "/api"
-  apiPublicPath: "/api/public"
   adminPath: "/admin/"
   keycloak:
     clientId: "eagle-api-console"

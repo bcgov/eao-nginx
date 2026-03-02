@@ -114,13 +114,11 @@ podAnnotations: {}
 # Application configuration served at /config.json
 # These are defaults - override in values-{env}.yaml
 config:
-  debugMode: false
   environment: "local"
   bannerColour: ""
   logLevel: 0
   apiLocation: "http://localhost:3000"
   apiPath: "/api"
-  apiPublicPath: "/api/public"
   adminPath: "/admin/"
   keycloak:
     clientId: "eagle-api-console"
