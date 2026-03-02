@@ -94,8 +94,13 @@ jobs:
 
       - name: Tag Image
         run: |
-          # Tag ci-latest as version
-          oc tag ${{ env.IMAGE_NAME }}:ci-latest ${{ env.IMAGE_NAME }}:${{ needs.validate.outputs.version }} -n ${{ env.OPENSHIFT_NAMESPACE_TOOLS }}
+          # Check if version tag exists, create from ci-latest if not
+          if oc -n ${{ env.OPENSHIFT_NAMESPACE_TOOLS }} get imagestreamtag ${{ env.IMAGE_NAME }}:${{ needs.validate.outputs.version }} &>/dev/null; then
+            echo "Image tag ${{ needs.validate.outputs.version }} already exists - using existing image"
+          else
+            echo "Image tag ${{ needs.validate.outputs.version }} does not exist - tagging from ci-latest"
+            oc tag ${{ env.IMAGE_NAME }}:ci-latest ${{ env.IMAGE_NAME }}:${{ needs.validate.outputs.version }} -n ${{ env.OPENSHIFT_NAMESPACE_TOOLS }}
+          fi
           
           # Tag version as test
           oc tag ${{ env.IMAGE_NAME }}:${{ needs.validate.outputs.version }} ${{ env.IMAGE_NAME }}:test -n ${{ env.OPENSHIFT_NAMESPACE_TOOLS }}
