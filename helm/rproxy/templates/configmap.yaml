@@ -22,5 +22,8 @@ data:
       "ANALYTICS_ENHANCED_TRACKING": {{ .Values.config.analytics.enhancedTracking }},
       "ANALYTICS_TRAFFIC_TRACKING": {{ .Values.config.analytics.trafficTracking }},
       "SURVEY_URL": {{ .Values.config.survey.url | default "null" }},
-      "SHOW_SURVEY_BANNER": {{ .Values.config.survey.showBanner }}
+      "SHOW_SURVEY_BANNER": {{ .Values.config.survey.showBanner }},
+      "TYPESENSE_ENABLED": {{ .Values.config.typesense.enabled | default false }},
+      "TYPESENSE_SEARCH_HOST": {{ .Values.config.typesense.searchHost | default "/search-api" | quote }},
+      "TYPESENSE_SEARCH_KEY": {{ .Values.config.typesense.searchKey | default "" | quote }}
     }

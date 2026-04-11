@@ -92,6 +92,8 @@ spec:
               value: {{ .Values.nginx.epic.proxy.analytics | quote }}
             - name: NGINX__EPIC__PROXY__CERTBOT
               value: {{ .Values.nginx.epic.proxy.certbot | quote }}
+            - name: NGINX__EPIC__PROXY__TYPESENSE
+              value: {{ .Values.nginx.epic.proxy.typesense | default "http://localhost:9999" | quote }}
             - name: NGINX__EPIC__PROXY_DEPLOY_CONFIG__API_PUBLIC
               value: {{ .Values.nginx.epic.proxyDeployConfig.apiPublic | quote }}
           volumeMounts:

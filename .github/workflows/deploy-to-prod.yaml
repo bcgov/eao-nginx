@@ -116,6 +116,7 @@ jobs:
             --set image.tag=prod \
             --set httpBasic.eguide.username=${{ secrets.RPROXY_EGUIDE_USERNAME }} \
             --set httpBasic.eguide.password=${{ secrets.RPROXY_EGUIDE_PASSWORD }} \
+            --set config.typesense.searchKey=${{ secrets.TYPESENSE_SEARCH_KEY }} \
             --wait \
             --timeout 5m
 

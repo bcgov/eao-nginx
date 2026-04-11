@@ -79,6 +79,17 @@ server {
     proxy_read_timeout 10s;
   }
 
+  # Typesense search API — direct browser access with scoped search-only key
+  # Prefix /search-api/ is stripped by the trailing slash on proxy_pass (rewrite at proxy layer)
+  location /search-api/ {
+    proxy_pass ${NGINX__EPIC__PROXY__TYPESENSE}/;
+    proxy_http_version 1.1;
+    proxy_pass_request_headers on;
+    proxy_connect_timeout 5s;
+    proxy_send_timeout 10s;
+    proxy_read_timeout 10s;
+  }
+
   # Runtime configuration for frontend apps
   # Served from ConfigMap - edit via 'oc edit configmap rproxy-config' for instant changes
   # Frontends fetch this on startup to get environment-specific settings

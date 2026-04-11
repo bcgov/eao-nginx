@@ -138,6 +138,7 @@ jobs:
             --set httpBasic.password=${{ secrets.RPROXY_PASSWORD }} \
             --set httpBasic.public.username=${{ secrets.RPROXY_USERNAME }} \
             --set httpBasic.public.password=${{ secrets.RPROXY_PASSWORD }} \
+            --set config.typesense.searchKey=${{ secrets.TYPESENSE_SEARCH_KEY }} \
             --wait \
             --timeout 5m
 
