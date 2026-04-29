@@ -15,7 +15,7 @@ nginx:
       eguide: "http://eagle-api:3000"
       analytics: "http://penguin-analytics-api:3000"  # Production does not have analytics configured
       certbot: "http://certbot:8080"
-      typesense: ""  # Not yet deployed in prod
+      typesense: "http://typesense-typesense:8108"
 
 httpBasic:
   # Main endpoint auth disabled in production
@@ -73,6 +73,6 @@ config:
     url: null
     showBanner: false
   typesense:
-    enabled: false
+    enabled: true
     searchHost: "/search-api"
     searchKey: ""
