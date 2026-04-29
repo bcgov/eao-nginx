@@ -112,6 +112,13 @@ server {
 
     # its helpful to cache these responses
     proxy_cache globalcache;
+
+    # Explicit timeouts — must be lower than HAProxy route timeout (180s)
+    # so nginx fails first with a clean error rather than a generic 504.
+    # 120s gives headroom for large document uploads and slow aggregations.
+    proxy_connect_timeout 10s;
+    proxy_send_timeout    120s;
+    proxy_read_timeout    120s;
   }
 
   # Redirect /admin to /admin/ to avoid port exposure in redirects

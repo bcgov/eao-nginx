@@ -39,8 +39,7 @@ nginx:
       analytics: "http://penguin-analytics-api:3000"
       certbot: "http://certbot:8080"
       typesense: ""        # override per-environment: http://typesense-typesense:8108
-    proxyDeployConfig:
-      apiPublic: "proxy_connect_timeout 600; proxy_send_timeout 600; proxy_read_timeout 600;"
+    # proxyDeployConfig removed — timeouts are now hardcoded in server.conf.tmpl
 
 # HTTP Basic Authentication settings
 httpBasic:
@@ -73,6 +72,7 @@ route:
   enabled: true
   host: ""
   path: /
+  timeout: "180s"  # HAProxy route timeout — must exceed nginx proxy_read_timeout (120s)
   tls:
     enabled: true
     termination: edge
