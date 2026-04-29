@@ -73,6 +73,6 @@ config:
     url: null
     showBanner: false
   typesense:
-    enabled: true
+    enabled: false
     searchHost: "/search-api"
     searchKey: ""
