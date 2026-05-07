@@ -110,8 +110,12 @@ server {
     # Ensure HTTP get passed thru
     proxy_pass_request_headers on;
 
-    # its helpful to cache these responses
+    # Cache public (unauthenticated) API responses only.
+    # Authenticated requests bypass cache — admin users need fresh data
+    # after mutations (delete, publish, etc.).
     proxy_cache globalcache;
+    proxy_cache_bypass $http_authorization;
+    proxy_no_cache $http_authorization;
 
     # Explicit timeouts — must be lower than HAProxy route timeout (180s)
     # so nginx fails first with a clean error rather than a generic 504.
