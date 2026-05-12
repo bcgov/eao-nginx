@@ -82,4 +82,4 @@ config:
   typesense:
     enabled: true
     searchHost: "/search-api"
-    searchKey: ""  # Injected from TYPESENSE_SEARCH_KEY secret at deploy time
+    searchKey: "663a79a5233364885e17b812ec7ea188"

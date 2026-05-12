@@ -72,4 +72,4 @@ config:
   typesense:
     enabled: true
     searchHost: "/search-api"
-    searchKey: ""  # Injected via --set at deploy time
+    searchKey: "nTiAhZYwY1abAo4B2Og7A0E7gyUIM562"
