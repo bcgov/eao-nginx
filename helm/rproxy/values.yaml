@@ -137,4 +137,4 @@ config:
   typesense:
     enabled: false
     searchHost: "/search-api"
-    searchKey: ""
+    # searchKey removed — never expose parent key to browser. Scoped keys fetched from /api/public/search/key.
