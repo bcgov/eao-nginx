@@ -38,7 +38,6 @@ nginx:
       eguide: "http://eagle-api:3000"
       analytics: "http://penguin-analytics-api:3000"
       certbot: "http://certbot:8080"
-      typesense: ""        # override per-environment: http://typesense-typesense:8108
     # proxyDeployConfig removed — timeouts are now hardcoded in server.conf.tmpl
 
 # HTTP Basic Authentication settings
@@ -136,5 +135,3 @@ config:
     showBanner: false
   typesense:
     enabled: false
-    searchHost: "/search-api"
-    # searchKey removed — never expose parent key to browser. Scoped keys fetched from /api/public/search/key.
