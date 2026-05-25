@@ -23,5 +23,6 @@ data:
       "ANALYTICS_TRAFFIC_TRACKING": {{ .Values.config.analytics.trafficTracking }},
       "SURVEY_URL": {{ .Values.config.survey.url | default "null" }},
       "SHOW_SURVEY_BANNER": {{ .Values.config.survey.showBanner }},
-      "TYPESENSE_ENABLED": {{ .Values.config.typesense.enabled | default false }}
+      "TYPESENSE_ENABLED": {{ .Values.config.typesense.enabled | default false }},
+      "ENGAGE_API_URL": {{ .Values.config.engage.apiUrl | default "" | quote }}
     }
