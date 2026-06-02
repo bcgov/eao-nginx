@@ -76,6 +76,13 @@ route:
     enabled: true
     termination: edge
     insecureEdgeTerminationPolicy: Redirect
+  # Post-install/post-upgrade hook to patch HAProxy rate-limiting annotations onto
+  # the pre-existing Route (which is not managed by Helm when route.enabled=false).
+  patchAnnotations:
+    enabled: false
+    # routeName: override if the Route name differs from the chart fullname (rproxy)
+    routeName: ""
+    image: "bitnami/kubectl:1.30"
 
 resources:
   limits:

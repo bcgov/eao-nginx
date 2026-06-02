@@ -8,6 +8,9 @@ metadata:
   annotations:
     openshift.io/host.generated: "false"
     haproxy.router.openshift.io/timeout: {{ .Values.route.timeout | default "180s" | quote }}
+    haproxy.router.openshift.io/rate-limit-connections: "true"
+    haproxy.router.openshift.io/rate-limit-connections.concurrent-tcp: "100"
+    haproxy.router.openshift.io/rate-limit-connections.rate-tcp: "50"
 spec:
   host: {{ .Values.route.host }}
   {{- if .Values.route.path }}

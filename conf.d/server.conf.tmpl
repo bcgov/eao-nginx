@@ -1,3 +1,19 @@
+# ── Rate Limiting ─────────────────────────────────────────────────────────────
+# Zone definitions live here (http context — this file is included from nginx.conf
+# inside its http {} block via `include /etc/nginx/conf.d/*.conf`).
+# $binary_remote_addr is more compact than $remote_addr (4/16 bytes vs string).
+# Zone sizes: 10m ≈ 80k states — adequate for gov-scale traffic.
+limit_req_zone  $binary_remote_addr zone=api_general:10m rate=30r/s;
+limit_req_zone  $binary_remote_addr zone=api_search:10m  rate=10r/s;
+limit_req_zone  $binary_remote_addr zone=analytics:5m    rate=20r/s;
+limit_conn_zone $binary_remote_addr zone=conn_per_ip:10m;
+
+# Respond 429 Too Many Requests (not default 503) and log at warn not error
+limit_req_status  429;
+limit_conn_status 429;
+limit_req_log_level  warn;
+limit_conn_log_level warn;
+
 # Ajax
 server {
   listen       8080;
@@ -13,6 +29,9 @@ server {
 
   # Allows non-standard headers like SMGOV_USERGUID
   ignore_invalid_headers off;
+
+  # Limit concurrent TCP connections per IP across all locations in this server block
+  limit_conn conn_per_ip 50;
 
   # 172.16.0.0/12 is the entire addressable space in the cluster
   #set_real_ip_from  172.51.0.0/22;
@@ -60,6 +79,7 @@ server {
 
   # Redirect legacy /api/analytics path used by cached env.js (pre-v2.4.1)
   location = /api/analytics {
+    limit_req zone=analytics burst=30 nodelay;
     proxy_pass ${NGINX__EPIC__PROXY__ANALYTICS}/analytics;
     proxy_http_version 1.1;
     proxy_pass_request_headers on;
@@ -71,6 +91,7 @@ server {
   # Analytics API - proxies to penguin-analytics service
   # Used by eagle-public and eagle-admin for anonymous usage tracking
   location /analytics {
+    limit_req zone=analytics burst=30 nodelay;
     proxy_pass ${NGINX__EPIC__PROXY__ANALYTICS}/analytics;
     proxy_http_version 1.1;
     proxy_pass_request_headers on;
@@ -89,6 +110,33 @@ server {
     add_header Access-Control-Allow-Origin "*";
   }
 
+  # Typesense search proxy — tighter rate limit than general /api (queries are CPU/RAM intensive).
+  # ^~ prefix gives priority over the prefix /api location below so Typesense
+  # requests are counted against the search zone, not the general API zone.
+  location ^~ /api/public/typesense {
+    limit_req zone=api_search burst=20 nodelay;
+    proxy_pass ${NGINX__EPIC__PROXY__API};
+    proxy_pass_request_headers on;
+    proxy_cache globalcache;
+    proxy_cache_bypass $http_authorization;
+    proxy_no_cache $http_authorization;
+    proxy_connect_timeout 10s;
+    proxy_send_timeout    120s;
+    proxy_read_timeout    120s;
+  }
+
+  location ^~ /api/typesense {
+    limit_req zone=api_search burst=20 nodelay;
+    proxy_pass ${NGINX__EPIC__PROXY__API};
+    proxy_pass_request_headers on;
+    proxy_cache globalcache;
+    proxy_cache_bypass $http_authorization;
+    proxy_no_cache $http_authorization;
+    proxy_connect_timeout 10s;
+    proxy_send_timeout    120s;
+    proxy_read_timeout    120s;
+  }
+
   location /api {
     # proxy all traffic to this URL,
     # note the trailing slash strips out the /proxy path on
@@ -98,6 +146,7 @@ server {
 
     # Ensure HTTP get passed thru
     proxy_pass_request_headers on;
+    limit_req zone=api_general burst=50 nodelay;
 
     # Cache public (unauthenticated) API responses only.
     # Authenticated requests bypass cache — admin users need fresh data

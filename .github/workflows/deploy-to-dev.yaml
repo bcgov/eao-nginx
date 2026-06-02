@@ -85,11 +85,7 @@ jobs:
           rm -f openshift-client-linux.tar.gz
 
       - name: Log into OpenShift
-        uses: redhat-actions/oc-login@v1
-        with:
-          openshift_server_url: ${{ secrets.OPENSHIFT_URL }}
-          openshift_token: ${{ secrets.OPENSHIFT_TOKEN }}
-          namespace: ${{ env.OPENSHIFT_NAMESPACE_TOOLS }}
+        run: oc login ${{ secrets.OPENSHIFT_URL }} --token=${{ secrets.OPENSHIFT_TOKEN }} --insecure-skip-tls-verify=true
 
       - name: Tag images in OpenShift ImageStream
         run: |
@@ -121,12 +117,7 @@ jobs:
           helm version
 
       - name: Log in to OpenShift
-        uses: redhat-actions/oc-login@v1
-        with:
-          openshift_server_url: ${{ secrets.OPENSHIFT_URL }}
-          openshift_token: ${{ secrets.OPENSHIFT_TOKEN }}
-          insecure_skip_tls_verify: true
-          namespace: ${{ env.OPENSHIFT_NAMESPACE_DEV }}
+        run: oc login ${{ secrets.OPENSHIFT_URL }} --token=${{ secrets.OPENSHIFT_TOKEN }} --insecure-skip-tls-verify=true
 
       - name: Deploy with Helm
         run: |
@@ -140,6 +131,12 @@ jobs:
             --set httpBasic.public.password=${{ secrets.RPROXY_PASSWORD }} \
             --wait \
             --timeout 5m
+
+      - name: Patch HAProxy rate-limit annotations on Route
+        run: |
+          oc patch route ${{ env.APP_NAME }} -n ${{ env.OPENSHIFT_NAMESPACE_DEV }} --type=merge \
+            -p '{"metadata":{"annotations":{"haproxy.router.openshift.io/rate-limit-connections":"true","haproxy.router.openshift.io/rate-limit-connections.concurrent-tcp":"100","haproxy.router.openshift.io/rate-limit-connections.rate-tcp":"50"}}}' \
+            || echo "Warning: Route not found or patch failed — annotations may need to be applied manually"
 
       - name: Verify Deployment
         run: |
