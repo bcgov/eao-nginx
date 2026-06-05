@@ -71,7 +71,7 @@ route:
   enabled: true
   host: ""
   path: /
-  timeout: "180s"  # HAProxy route timeout — must exceed nginx proxy_read_timeout (120s)
+  timeout: "360s"  # HAProxy route timeout — must exceed nginx proxy_read_timeout (330s for /api/demi/, 120s for /api)
   tls:
     enabled: true
     termination: edge

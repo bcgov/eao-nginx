@@ -137,6 +137,20 @@ server {
     proxy_read_timeout    120s;
   }
 
+  # DEMI extraction endpoint — long timeout for docling-serve PDF processing.
+  # ^~ prefix takes priority over the /api prefix block below.
+  # Timeout chain (must be ascending):
+  #   DOCLING_SERVE_MAX_SYNC_WAIT (280s) < eagle-api AbortSignal (300s)
+  #   < nginx proxy_read_timeout (330s) < HAProxy route timeout (360s)
+  location ^~ /api/demi/ {
+    proxy_pass ${NGINX__EPIC__PROXY__API};
+    proxy_pass_request_headers on;
+    limit_req zone=api_general burst=5 nodelay;
+    proxy_connect_timeout 10s;
+    proxy_send_timeout    330s;
+    proxy_read_timeout    330s;
+  }
+
   location /api {
     # proxy all traffic to this URL,
     # note the trailing slash strips out the /proxy path on
