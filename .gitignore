@@ -11,3 +11,5 @@ Thumbs.db
 # Internal AI assistant notes
 .github/copilot-instructions.md
 .github/instructions/
+CLAUDE.md
+GEMINI.md
