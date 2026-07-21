@@ -67,14 +67,22 @@ jobs:
           insecure_skip_tls_verify: true
           namespace: ${{ env.OPENSHIFT_NAMESPACE_TOOLS }}
 
-      - name: Verify Image Tag Exists
+      - name: Verify Image Tag Exists and is healthy
         run: |
           if ! oc get istag ${{ env.IMAGE_NAME }}:${{ needs.validate.outputs.version }} -n ${{ env.OPENSHIFT_NAMESPACE_TOOLS }} &>/dev/null; then
             echo "Error: Image tag ${{ needs.validate.outputs.version }} does not exist"
             echo "Please deploy to test environment first"
             exit 1
           fi
-          echo "Image tag ${{ needs.validate.outputs.version }} verified"
+          
+          # Verify the tag is in a healthy import state
+          STATUS=$(oc get imagestreamtag ${{ env.IMAGE_NAME }}:${{ needs.validate.outputs.version }} -n ${{ env.OPENSHIFT_NAMESPACE_TOOLS }} -o jsonpath='{.conditions[?(@.type=="ImportSuccess")].status}' 2>/dev/null || echo "Unknown")
+          MESSAGE=$(oc get imagestreamtag ${{ env.IMAGE_NAME }}:${{ needs.validate.outputs.version }} -n ${{ env.OPENSHIFT_NAMESPACE_TOOLS }} -o jsonpath='{.conditions[?(@.type=="ImportSuccess")].message}' 2>/dev/null || echo "")
+          if [ "$STATUS" = "False" ]; then
+            echo "❌ Image tag ${{ needs.validate.outputs.version }} is in a failed import state: $MESSAGE"
+            exit 1
+          fi
+          echo "Image tag ${{ needs.validate.outputs.version }} verified and healthy"
 
       - name: Tag Image for Prod
         run: |
