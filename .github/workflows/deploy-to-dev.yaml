@@ -85,7 +85,12 @@ jobs:
           rm -f openshift-client-linux.tar.gz
 
       - name: Log into OpenShift
-        run: oc login ${{ secrets.OPENSHIFT_URL }} --token=${{ secrets.OPENSHIFT_TOKEN }} --insecure-skip-tls-verify=true
+        uses: redhat-actions/oc-login@v1
+        with:
+          openshift_server_url: ${{ secrets.OPENSHIFT_URL }}
+          openshift_token: ${{ secrets.OPENSHIFT_TOKEN }}
+          insecure_skip_tls_verify: true
+          namespace: ${{ env.OPENSHIFT_NAMESPACE_TOOLS }}
 
       - name: Tag images in OpenShift ImageStream
         run: |
@@ -117,7 +122,12 @@ jobs:
           helm version
 
       - name: Log in to OpenShift
-        run: oc login ${{ secrets.OPENSHIFT_URL }} --token=${{ secrets.OPENSHIFT_TOKEN }} --insecure-skip-tls-verify=true
+        uses: redhat-actions/oc-login@v1
+        with:
+          openshift_server_url: ${{ secrets.OPENSHIFT_URL }}
+          openshift_token: ${{ secrets.OPENSHIFT_TOKEN }}
+          insecure_skip_tls_verify: true
+          namespace: ${{ env.OPENSHIFT_NAMESPACE_DEV }}
 
       - name: Deploy with Helm
         run: |
