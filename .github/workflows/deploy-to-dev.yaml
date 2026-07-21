@@ -60,12 +60,12 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v6
 
-      - name: Login to OpenShift registry
+      - name: Log in to GitHub Container Registry
         uses: docker/login-action@v4
         with:
-          registry: ${{ secrets.OPENSHIFT_REPOSITORY }}
-          username: ${{ secrets.OPENSHIFT_REPOSITORY_USERNAME }}
-          password: ${{ secrets.OPENSHIFT_REPOSITORY_PASSWORD }}
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
 
       - name: Build and push Docker image
         uses: docker/build-push-action@v7
@@ -73,9 +73,9 @@ jobs:
           context: .
           push: true
           tags: |
-            ${{ secrets.OPENSHIFT_REPOSITORY }}/${{ env.OPENSHIFT_NAMESPACE_TOOLS }}/${{ env.IMAGE_NAME }}:dev
-            ${{ secrets.OPENSHIFT_REPOSITORY }}/${{ env.OPENSHIFT_NAMESPACE_TOOLS }}/${{ env.IMAGE_NAME }}:ci-latest
-            ${{ secrets.OPENSHIFT_REPOSITORY }}/${{ env.OPENSHIFT_NAMESPACE_TOOLS }}/${{ env.IMAGE_NAME }}:${{ needs.scan.outputs.SHORT_SHA }}
+            ghcr.io/${{ github.repository }}:dev
+            ghcr.io/${{ github.repository }}:ci-latest
+            ghcr.io/${{ github.repository }}:${{ needs.scan.outputs.SHORT_SHA }}
 
       - name: Install OpenShift CLI
         run: |
@@ -128,6 +128,11 @@ jobs:
           openshift_token: ${{ secrets.OPENSHIFT_TOKEN }}
           insecure_skip_tls_verify: true
           namespace: ${{ env.OPENSHIFT_NAMESPACE_DEV }}
+
+      - name: Import image from GHCR
+        run: |
+          # Point local ImageStreamTag to GHCR with --scheduled flag to trigger automatic background controller import
+          oc -n ${{ env.OPENSHIFT_NAMESPACE_TOOLS }} tag ghcr.io/${{ github.repository }}:dev ${{ env.IMAGE_NAME }}:dev --reference-policy=local --scheduled
 
       - name: Deploy with Helm
         run: |
