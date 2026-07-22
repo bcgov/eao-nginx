@@ -36,7 +36,7 @@ httpBasic:
     password: ""
 
 route:
-  enabled: true  # Helm manages the rproxy route
+  enabled: false  # Route is managed by eagle-api chart, matching test and prod
   host: eagle-dev.apps.silver.devops.gov.bc.ca
 
 resources:
