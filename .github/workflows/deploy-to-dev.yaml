@@ -142,11 +142,12 @@ jobs:
             --wait \
             --timeout 5m
 
-      - name: Patch HAProxy rate-limit annotations on Route
+      - name: Patch HAProxy rate-limit and service target annotations on Route
         run: |
-          oc patch route ${{ env.APP_NAME }} -n ${{ env.OPENSHIFT_NAMESPACE_DEV }} --type=merge \
-            -p '{"metadata":{"annotations":{"haproxy.router.openshift.io/rate-limit-connections":"true","haproxy.router.openshift.io/rate-limit-connections.concurrent-tcp":"100","haproxy.router.openshift.io/rate-limit-connections.rate-tcp":"50"}}}' \
+          oc patch route eagle-api -n ${{ env.OPENSHIFT_NAMESPACE_DEV }} --type=merge \
+            -p '{"spec":{"to":{"kind":"Service","name":"rproxy"},"port":{"targetPort":"8080-tcp"}},"metadata":{"annotations":{"haproxy.router.openshift.io/rate-limit-connections":"true","haproxy.router.openshift.io/rate-limit-connections.concurrent-tcp":"100","haproxy.router.openshift.io/rate-limit-connections.rate-tcp":"50"}}}' \
             || echo "Warning: Route not found or patch failed — annotations may need to be applied manually"
+
 
       - name: Verify Deployment
         run: |
