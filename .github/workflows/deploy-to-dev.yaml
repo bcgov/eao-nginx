@@ -154,7 +154,7 @@ jobs:
 
       - name: Patch HAProxy rate-limit and service target annotations on Route
         run: |
-          for route in eagle-api rproxy eagle-dev; do
+          for route in rproxy; do
             echo "Attempting to patch Route: $route"
             oc patch route "$route" -n ${{ env.OPENSHIFT_NAMESPACE_DEV }} --type=merge \
               -p '{"spec":{"to":{"kind":"Service","name":"rproxy"},"port":{"targetPort":"8080-tcp"}},"metadata":{"annotations":{"haproxy.router.openshift.io/rate-limit-connections":"true","haproxy.router.openshift.io/rate-limit-connections.concurrent-tcp":"100","haproxy.router.openshift.io/rate-limit-connections.rate-tcp":"50"}}}' || echo "Route $route not found or patch failed"
