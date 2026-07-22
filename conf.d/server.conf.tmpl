@@ -27,6 +27,10 @@ server {
   listen       8080 default_server;
   server_name  ${NGINX__EPIC__SERVER_NAME};
 
+  # Prevent Nginx from prepending scheme/host/port to redirects (prevents HTTP downgrade and port 8080 exposure behind TLS termination)
+  absolute_redirect off;
+  port_in_redirect off;
+
   # Allows non-standard headers like SMGOV_USERGUID
   ignore_invalid_headers off;
 
@@ -179,6 +183,7 @@ server {
 
   # Redirect /admin to /admin/ to avoid port exposure in redirects
   location = /admin {
+    absolute_redirect off;
     return 301 /admin/;
   }
 
