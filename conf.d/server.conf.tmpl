@@ -179,7 +179,7 @@ server {
 
   # Redirect /admin to /admin/ to avoid port exposure in redirects
   location = /admin {
-    return 301 $scheme://$host/admin/;
+    return 301 /admin/;
   }
 
   location /admin/ {
