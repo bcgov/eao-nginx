@@ -114,6 +114,39 @@ server {
     add_header Access-Control-Allow-Origin "*";
   }
 
+  # eagle-search (Azure AI Search) — the search backend for Project, Document and DocumentChunk.
+  #
+  # WHY PROXY IT INSTEAD OF LETTING THE BROWSER CALL AZURE. eagle-public's Content-Security-Policy is
+  # `connect-src 'self' https://*.gov.bc.ca` and it is baked into that image, so it cannot vary per
+  # environment and it blocks *.azurewebsites.net outright. Same-origin sidesteps the CSP, needs no
+  # CORS, and keeps the Azure hostname off the page.
+  #
+  # PATH REWRITE. Trailing slashes on both sides, so /eagle-search/search?… reaches the upstream as
+  # /api/search?…. eagle-public sends SEARCH_API_PATH=/eagle-search (from the ConfigMap) and appends
+  # `search?…` itself.
+  #
+  # NOT /search-api/ — that path existed here and was removed in d7dc62c, "remove /search-api direct
+  # Typesense exposure". Reusing the name would make that commit read as reverted.
+  #
+  # FIRST EXTERNAL HTTPS UPSTREAM IN THIS FILE. Two consequences:
+  #   - proxy_ssl_server_name is required; App Service needs SNI and nginx defaults it off.
+  #   - There is no `resolver` here, so nginx resolves this hostname ONCE, at config load. Every
+  #     other upstream is a ClusterIP Service, where that has never mattered. If an App Service IP
+  #     moves, this location 502s while the name resolves fine everywhere else; the fix is
+  #     `oc rollout restart deploy/rproxy`.
+  #
+  # No proxy_cache, unlike the Typesense blocks below: eagle-search sends no cache headers, so it
+  # would be inert today and an ACL leak the day this endpoint learns about authentication.
+  location ^~ /eagle-search/ {
+    limit_req zone=api_search burst=20 nodelay;
+    proxy_pass ${NGINX__EPIC__PROXY__SEARCH}/api/;
+    proxy_ssl_server_name on;
+    proxy_pass_request_headers on;
+    proxy_connect_timeout 10s;
+    proxy_send_timeout    60s;
+    proxy_read_timeout    60s;
+  }
+
   # Typesense search proxy — tighter rate limit than general /api (queries are CPU/RAM intensive).
   # ^~ prefix gives priority over the prefix /api location below so Typesense
   # requests are counted against the search zone, not the general API zone.

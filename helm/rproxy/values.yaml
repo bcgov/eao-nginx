@@ -38,6 +38,9 @@ nginx:
       eguide: "http://eagle-api:3000"
       analytics: "http://penguin-analytics-api:3000"
       certbot: "http://certbot:8080"
+      # eagle-search, per environment. Empty here on purpose: only dev has a search service, and the
+      # deployment substitutes an unreachable sentinel so nginx still starts everywhere else.
+      search: ""
     # proxyDeployConfig removed — timeouts are now hardcoded in server.conf.tmpl
 
 # HTTP Basic Authentication settings

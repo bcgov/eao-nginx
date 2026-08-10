@@ -92,6 +92,12 @@ spec:
               value: {{ .Values.nginx.epic.proxy.analytics | quote }}
             - name: NGINX__EPIC__PROXY__CERTBOT
               value: {{ .Values.nginx.epic.proxy.certbot | quote }}
+            # Sentinel default, not decoration: envsubst turns an empty value into `proxy_pass ;`,
+            # which is [emerg] and takes the whole proxy down — conf.d is included into http {}.
+            # An unreachable localhost port gives an environment with no search service a 502
+            # instead of a CrashLoopBackOff. Same shape the Typesense upstream used before d7dc62c.
+            - name: NGINX__EPIC__PROXY__SEARCH
+              value: {{ .Values.nginx.epic.proxy.search | default "http://localhost:9999" | quote }}
           volumeMounts:
             - name: config
               mountPath: /etc/nginx/config

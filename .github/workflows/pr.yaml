@@ -40,6 +40,45 @@ jobs:
           
           echo "✓ nginx config template validation passed"
 
+      # The grep above cannot tell a valid config from one that will not start. envsubst turns an
+      # empty ${VAR} into `proxy_pass ;`, which is [emerg], and conf.d is included into http {} — so
+      # the whole reverse proxy crash-loops for that environment. Without this step that surfaces as
+      # a five-minute `helm --wait` timeout after merge, not as a failed check here.
+      #
+      # Upstreams are pointed at 127.0.0.1 because nginx resolves every proxy_pass host at config
+      # load and cluster Service names do not resolve on a runner.
+      - name: nginx -t on the rendered template
+        run: |
+          render_and_test() {
+            docker run --rm \
+              --add-host eagle-public:127.0.0.1 --add-host eagle-api:127.0.0.1 \
+              --add-host eagle-admin:127.0.0.1 --add-host penguin-analytics-api:127.0.0.1 \
+              --add-host certbot:127.0.0.1 \
+              -e NGINX__EPIC__SERVER_NAME=example.test \
+              -e NGINX__AJAX__SERVER_NAME=ajax.example.test -e NGINX__AJAX__REDIRECT=example.test/x \
+              -e NGINX__EPIC__PROXY__ROOT=http://eagle-public:8080 \
+              -e NGINX__EPIC__PROXY__API=http://eagle-api:3000 \
+              -e NGINX__EPIC__PROXY__ADMIN=http://eagle-admin:8080 \
+              -e NGINX__EPIC__PROXY__PUBLIC=http://eagle-public:8080 \
+              -e NGINX__EPIC__PROXY__EGUIDE=http://eagle-api:3000 \
+              -e NGINX__EPIC__PROXY__ANALYTICS=http://penguin-analytics-api:3000 \
+              -e NGINX__EPIC__PROXY__CERTBOT=http://certbot:8080 \
+              -e NGINX__EPIC__PROXY__SEARCH="$1" \
+              -e HTTP_BASIC= -e HTTP_BASIC1= -e HTTP_BASIC2= \
+              -v "$PWD/conf.d/server.conf.tmpl:/etc/nginx/templates/default.conf.template:ro" \
+              -v "$PWD/nginx.conf:/etc/nginx/nginx.conf:ro" \
+              nginx:1.27-alpine sh -c '
+                mkdir -p /etc/nginx/config && echo "{}" > /etc/nginx/config/config.json
+                /docker-entrypoint.d/20-envsubst-on-templates.sh >/dev/null 2>&1
+                nginx -t'
+          }
+
+          # Both shapes an environment can render: a real search upstream, and the
+          # localhost sentinel that stands in where there is no search service.
+          render_and_test "https://eagle-search-api-dev.azurewebsites.net"
+          render_and_test "http://localhost:9999"
+          echo "✓ rendered config passes nginx -t"
+
       - name: Validate Helm chart
         run: |
           # Check Helm chart structure
