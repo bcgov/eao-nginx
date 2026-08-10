@@ -78,7 +78,5 @@ config:
   survey:
     url: null
     showBanner: false
-  typesense:
-    enabled: true
   engage:
     apiUrl: "https://epic-engage-web-test.apps.gold.devops.gov.bc.ca/api"

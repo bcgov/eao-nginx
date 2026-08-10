@@ -147,38 +147,6 @@ server {
     proxy_read_timeout    60s;
   }
 
-  # Typesense search proxy — tighter rate limit than general /api (queries are CPU/RAM intensive).
-  # ^~ prefix gives priority over the prefix /api location below so Typesense
-  # requests are counted against the search zone, not the general API zone.
-  location ^~ /api/public/typesense {
-    limit_req zone=api_search burst=20 nodelay;
-    proxy_pass ${NGINX__EPIC__PROXY__API};
-    proxy_pass_request_headers on;
-    proxy_cache globalcache;
-    proxy_cache_bypass $http_authorization;
-    proxy_no_cache $http_authorization;
-    proxy_connect_timeout 10s;
-    proxy_send_timeout    120s;
-    proxy_read_timeout    120s;
-  }
-
-  location ^~ /api/typesense {
-    limit_req zone=api_search burst=20 nodelay;
-    proxy_pass ${NGINX__EPIC__PROXY__API};
-    proxy_pass_request_headers on;
-    proxy_cache globalcache;
-    proxy_cache_bypass $http_authorization;
-    proxy_no_cache $http_authorization;
-    proxy_connect_timeout 10s;
-    proxy_send_timeout    120s;
-    proxy_read_timeout    120s;
-  }
-
-  # DEMI extraction endpoint — long timeout for docling-serve PDF processing.
-  # ^~ prefix takes priority over the /api prefix block below.
-  # Timeout chain (must be ascending):
-  #   DOCLING_SERVE_MAX_SYNC_WAIT (280s) < eagle-api AbortSignal (300s)
-  #   < nginx proxy_read_timeout (330s) < HAProxy route timeout (360s)
   location ^~ /api/demi/ {
     proxy_pass ${NGINX__EPIC__PROXY__API};
     proxy_pass_request_headers on;

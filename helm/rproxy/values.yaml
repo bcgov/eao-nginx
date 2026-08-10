@@ -143,8 +143,6 @@ config:
   survey:
     url: null
     showBanner: false
-  typesense:
-    enabled: false
   # Present so the chart renders from values.yaml alone. `| default ""` in the template does not
   # save it: `.Values.config.engage.apiUrl` dereferences a nil `engage` first, so `helm lint`
   # (which uses only this file) failed outright.
