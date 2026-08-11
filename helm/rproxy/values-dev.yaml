@@ -15,8 +15,8 @@ nginx:
       eguide: "http://eagle-api:3000"
       analytics: "http://penguin-analytics-api:3000"
       certbot: "http://certbot:8080"
-      # eagle-search on Azure. Bare host: the /api is added by the proxy_pass in server.conf.tmpl.
-      search: "https://eagle-search-api-dev.azurewebsites.net"
+      # No eagle-search route: the Azure dev estate was torn down 2026-08-11 (staging lives in
+      # c4b0a8-test). Dev clients fall back to eagle-api for search — the documented rollback.
 
 httpBasic:
   enabled: true
@@ -56,13 +56,8 @@ config:
   logLevel: 0
   apiLocation: "https://eagle-dev.apps.silver.devops.gov.bc.ca"
   apiPath: "/api"
-  # Sends Project, Document and DocumentChunk search to eagle-search; everything else stays on
-  # eagle-api. Empty (the default everywhere else) means eagle-api for those too, which is the
-  # rollback: blank it with `oc edit configmap rproxy-config` and clients revert on next load.
-  #
-  # RELATIVE, and without `/api` — unlike the Azure preview app's value, which is a full
-  # `https://…/api` because it has no proxy in front of it. Here nginx supplies the /api.
-  searchApiPath: "/eagle-search"
+  # searchApiPath deliberately absent: empty means eagle-api serves Project/Document/
+  # DocumentChunk search. The Azure dev search service is gone (2026-08-11 teardown).
   adminPath: "/admin/"
   keycloak:
     clientId: "eagle-api-console"
