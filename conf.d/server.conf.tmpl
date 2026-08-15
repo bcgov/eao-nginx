@@ -104,14 +104,26 @@ server {
     proxy_read_timeout 10s;
   }
 
-  # Runtime configuration for frontend apps
-  # Served from ConfigMap - edit via 'oc edit configmap rproxy-config' for instant changes
-  # Frontends fetch this on startup to get environment-specific settings
+  # Runtime configuration for the frontends, served by eagle-api from a Config document.
+  # Its own block rather than falling through to `location /api`, for two reasons:
+  #   - proxy_cache_use_stale: eagle-admin now fails to boot on a failed fetch, so a good config
+  #     must outlive a brief eagle-api outage. Failures are never cached — the controller sets
+  #     no-store on its 404 and 500.
+  #   - timeouts that SUM to under admin's own 5s AbortSignal (1s connect + 3s read = 4s worst
+  #     case), or nginx would still be waiting when the browser has already given up and shown
+  #     the error page — and use_stale's `timeout` condition could never fire in time to help.
+  # Deliberately NO limit_req: the alias this replaces had none, `location /api` uses a per-IP zone
+  # shared with every other API call on the page, and a 429 here now white-screens the admin console.
   location = /api/config {
-    alias /etc/nginx/config/config.json;
-    default_type application/json;
-    add_header Cache-Control "no-cache, no-store, must-revalidate";
-    add_header Access-Control-Allow-Origin "*";
+    proxy_pass ${NGINX__EPIC__PROXY__API};
+    proxy_pass_request_headers on;
+
+    proxy_cache globalcache;
+    proxy_cache_use_stale error timeout http_500 http_502 http_503 http_504;
+
+    proxy_connect_timeout 1s;
+    proxy_send_timeout    3s;
+    proxy_read_timeout    3s;
   }
 
   # eagle-search (Azure AI Search) — the search backend for Project, Document and DocumentChunk.

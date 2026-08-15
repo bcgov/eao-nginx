@@ -53,7 +53,7 @@ jobs:
             docker run --rm \
               --add-host eagle-public:127.0.0.1 --add-host eagle-api:127.0.0.1 \
               --add-host eagle-admin:127.0.0.1 --add-host penguin-analytics-api:127.0.0.1 \
-              --add-host certbot:127.0.0.1 \
+              --add-host certbot:127.0.0.1 --add-host eagle-search.example.test:127.0.0.1 \
               -e NGINX__EPIC__SERVER_NAME=example.test \
               -e NGINX__AJAX__SERVER_NAME=ajax.example.test -e NGINX__AJAX__REDIRECT=example.test/x \
               -e NGINX__EPIC__PROXY__ROOT=http://eagle-public:8080 \
@@ -73,9 +73,15 @@ jobs:
                 nginx -t'
           }
 
-          # Both shapes an environment can render: a real search upstream, and the
+          # Both shapes an environment can render: an https search upstream, and the
           # localhost sentinel that stands in where there is no search service.
-          render_and_test "https://eagle-search-api-dev.azurewebsites.net"
+          #
+          # The host is pinned to 127.0.0.1 like every other upstream here, and is deliberately
+          # not a real one. nginx resolves each proxy_pass host at config load, so naming a live
+          # Azure App Service made this step fail the day that estate was torn down (#30) — on
+          # every branch, for a reason no PR had introduced. What is under test is that the
+          # template renders and parses, not that somebody else's DNS still answers.
+          render_and_test "https://eagle-search.example.test"
           render_and_test "http://localhost:9999"
           echo "✓ rendered config passes nginx -t"
 
