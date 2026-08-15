@@ -19,7 +19,8 @@ Reverse proxy for the EPIC platform.
 - **Legacy Analytics**: The `/api/analytics` location block MUST come before the general `/api` block to ensure correct priority.
 
 ### Runtime Config
-- Serves `/api/config` from the `rproxy-config` ConfigMap. Changes can be made live via `oc edit configmap`.
+- **Dev only.** Proxies `/api/config` to eagle-api, which serves it from a Config document in Mongo. Edit the document, not the ConfigMap; propagation is up to ~2 min (`max-age=60`, honoured by rproxy's cache and again by the browser), not instant. Test and prod still serve the ConfigMap, where `oc edit configmap` remains the instant lever.
+- Rollback is **re-tagging the previous image** — `oc tag rproxy:<prev-sha> rproxy:dev -n 6cdc9e-tools`. `server.conf.tmpl` is baked in at `Dockerfile:39`, so re-adding the `alias` block is a code change plus a build plus a deploy, not a rollback. The `rproxy-config` ConfigMap and its mount stay for one release so the re-tagged image has something to serve.
 
 ## Deployment
 

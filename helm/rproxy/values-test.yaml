@@ -59,7 +59,7 @@ resources:
     cpu: 30m
     memory: 25Mi
 
-# Application configuration served at /config.json
+# Application configuration served at /api/config
 config:
   environment: "test"
   bannerColour: "orange"
