@@ -15,6 +15,12 @@ nginx:
       eguide: "http://eagle-api:3000"
       analytics: "http://penguin-analytics-api:3000"  # Production does not have analytics configured
       certbot: "http://certbot:8080"
+      # search: eagle-search on Azure. Bare host — the /api is added by the proxy_pass in
+      # server.conf.tmpl, exactly as in values-test.yaml. LEFT COMMENTED because the production
+      # search estate does not exist yet (eagle-search azure/main.searchprod.bicep is written but
+      # unrun) and because `location ^~ /eagle-search/` with no upstream is a 502 generator. Fill in
+      # the host from that deployment's `searchApiHostName` output, never compose it.
+      # search: "https://eagle-search-api-prod.azurewebsites.net"
 
 httpBasic:
   # Main endpoint auth disabled in production
@@ -57,6 +63,20 @@ config:
   logLevel: 4
   apiLocation: "https://projects.eao.gov.bc.ca"
   apiPath: "/api"
+  # searchApiPath: THE SWITCH that moves Project and Document search off eagle-api/Mongo and onto
+  # eagle-search (Azure AI Search). Absent — as it is now — templates/configmap.yaml emits an empty
+  # SEARCH_API_PATH and the public bundle keeps asking eagle-api, which is the documented kill
+  # switch and today's production behaviour.
+  #
+  # DO NOT UNCOMMENT UNTIL ALL THREE ARE TRUE, in this order:
+  #   1. the prod search estate is deployed (eagle-search azure/main.searchprod.bicep),
+  #   2. the sync worker has run a FULL reindex against production Mongo and the counts have been
+  #      checked — an empty index answers every query with zero results, which is indistinguishable
+  #      from a working search that found nothing,
+  #   3. `proxy.search` above is filled in.
+  # Rollback is this line and that one going back to commented, or `oc edit configmap rproxy-config`
+  # to blank SEARCH_API_PATH; clients revert on their next load.
+  # searchApiPath: "/eagle-search"
   adminPath: "/admin/"
   keycloak:
     clientId: "eagle-api-console"
