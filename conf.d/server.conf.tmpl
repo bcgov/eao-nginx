@@ -43,11 +43,89 @@ server {
   #real_ip_header    X-Forwarded-For;
 
   location / {
-    # proxy all traffic to this URL,
-    # note the trailing slash strips out the /proxy path on
-    # the request to the upstream server
+    # proxy_pass carries no URI component, so the request URI reaches the upstream unmodified.
+    # (This block previously claimed a trailing slash stripped a /proxy prefix. There is no trailing
+    # slash here and no /proxy prefix anywhere in this file — the comment described a config that no
+    # longer exists, and it sat directly above the line it was describing wrongly.)
 
     proxy_pass ${NGINX__EPIC__PROXY__ROOT};
+
+    # PREPARED FOR AN EXTERNAL HTTPS ROOT UPSTREAM. NGINX__EPIC__PROXY__ROOT is
+    # http://eagle-public:8080 (an in-cluster ClusterIP Service) in every environment today, and this
+    # block is written so that flipping it to an https://<endpoint>.azurefd.net Front Door endpoint is
+    # a helm values change alone, with no config edit racing the cutover.
+    #
+    # SNI, for the same reason the /eagle-search/ block below sets it: nginx defaults
+    # proxy_ssl_server_name off, so it opens https upstreams with no server name and the peer has to
+    # guess which certificate to serve. Measured honestly, this line is insurance rather than a fix
+    # for a failure seen today — a bare `*.azurefd.net` default endpoint was probed both ways against
+    # nginx/1.27.5 and both returned 200, because the default endpoint has a wildcard certificate and
+    # proxy_ssl_verify is off anyway. It becomes load-bearing the moment a custom domain is attached
+    # to that endpoint, which is the planned later phase: Front Door then selects a per-domain
+    # certificate by SNI, and a handshake with no server name has nothing to select on. Setting it
+    # now costs nothing and keeps that phase from being a second config change nobody remembers.
+    # Inert against today's http:// upstream — proxy_ssl_* only apply when the proxied scheme is
+    # https, verified by serving real requests through this block with the directives in place.
+    #
+    # NOTE the difference from the /eagle-search/ block below, which sets only proxy_ssl_server_name:
+    # there the directive is REQUIRED, because App Service selects its certificate by SNI and a
+    # handshake without a server name fails outright. Here it is not required today — a bare
+    # *.azurefd.net endpoint answers either way, because it carries a wildcard certificate — and it
+    # becomes required only once a custom domain is attached. Two different reasons, same directive.
+    proxy_ssl_server_name on;
+
+    # AND VERIFY THE CERTIFICATE. proxy_ssl_server_name only tells the peer which certificate to
+    # serve; it does not check what comes back. nginx defaults proxy_ssl_verify OFF, so without
+    # these two lines every page request would be proxied over a TLS connection that is encrypted
+    # but unauthenticated — anything that can answer for the upstream address gets to serve the
+    # entire site, and the padlock in the browser would still be green because rproxy terminates
+    # the client's TLS separately. That is worth stating in full precisely because the failure is
+    # invisible: an unverified upstream looks identical to a verified one until someone is in the
+    # middle. The alpine base image already ships the CA bundle, so this costs nothing.
+    # Like the SNI directive above, both are inert while the upstream is plain http://.
+    proxy_ssl_verify on;
+    proxy_ssl_trusted_certificate /etc/ssl/certs/ca-certificates.crt;
+    proxy_ssl_verify_depth 3;
+
+    # DNS IS RESOLVED ONCE, AT CONFIG LOAD, AND THAT IS A DELIBERATE CHOICE HERE, NOT AN OVERSIGHT.
+    # The textbook fix for a moving cloud IP is a `resolver` plus a variable-form proxy_pass, which
+    # re-resolves per request. It was tested against this image (nginx/1.27.5, confirmed with
+    # `nginx -v` in a running rproxy pod) and rejected on evidence:
+    #
+    #   - nginx's resolver does NOT apply the resolv.conf search list. rproxy's resolv.conf is
+    #     `search <namespace>.svc.cluster.local svc.cluster.local cluster.local / nameserver <cluster
+    #     DNS> / options ndots:5`, so the bare Service name `eagle-public` resolves through libc but
+    #     NOT through nginx's own resolver — a probe with `resolver` set and `proxy_pass $var` to a
+    #     bare name that `getent hosts` resolves fine logs `could not be resolved (3: Host not
+    #     found)` and 502s. Switching this location to variable form therefore breaks 100% of page
+    #     traffic TODAY, before any cutover, and takes /lib (same variable) with it. Fixing that
+    #     means FQDN-ing the upstream values, which IS the production change this lane must not make.
+    #   - `resolver local=on`, which would read the nameserver out of /etc/resolv.conf instead of
+    #     hardcoding one, is an Angie extension, not an nginx one. 1.27.5 refuses to start on it:
+    #     `[emerg] host not found in resolver "local=on"`. A resolver here would mean pinning a
+    #     cluster DNS IP into a template shared by dev, test and prod.
+    #   - URI and Host handling were NOT the obstacle: both forms were verified to pass the request
+    #     URI through untouched and to send Host: <upstream host>, which is what Front Door routes on.
+    #
+    # THE ACCEPTED RISK, stated plainly because this location carries every page request: if the
+    # Front Door endpoint's anycast IP moves after cutover, nginx keeps using the stale one and the
+    # whole site 502s until `oc rollout restart deploy/rproxy`. Endpoint hostnames are stable
+    # (`<name>-<hash>.<zone>.azurefd.net`, assigned once at deploy); it is the address behind them
+    # that can move. Revisiting this needs two things proven first: every upstream value is an FQDN,
+    # and one resolver address is correct in all three namespaces.
+    #
+    # NOTHING IN THIS FILE WOULD TELL YOU IT HAD HAPPENED. /nginx_status reports connection counts,
+    # not upstream health, and the OpenShift readiness probe checks rproxy itself, which stays up
+    # and cheerfully returns 502. Detection has to come from outside: an external synthetic check on
+    # the site root, or an alert on rproxy's 502 rate. Whoever owns the cutover owns arranging one.
+    #
+    # TWO OTHER BLOCKS REACH eagle-public AND DO NOT FOLLOW THIS ONE AUTOMATICALLY:
+    #   - `location /lib` (below) uses this SAME variable, so it flips at the same instant and has
+    #     been given the same proxy_ssl_* directives. Nothing extra to do.
+    #   - `location /public` uses NGINX__EPIC__PROXY__PUBLIC, a separate value that also points at
+    #     http://eagle-public:8080 in every environment. It does NOT flip with this one, so after a
+    #     cutover it would still pin the OpenShift pod and quietly keep it load-bearing. Repoint or
+    #     retire it as part of the cutover, not before.
 
     # Ensure HTTP get passed thru
     proxy_pass_request_headers on;
@@ -267,6 +345,15 @@ server {
   # Cache the lib directory
   location /lib {
     proxy_pass ${NGINX__EPIC__PROXY__ROOT};
+    # Same variable as `location /`, so this block goes external on the same day and wants the same
+    # TLS settings, for the reasoning written out up there. Easy to miss precisely because it is a
+    # small legacy path that no page obviously depends on. Verification matters as much here as on
+    # the root: this location is cached, so one unverified response can be served to many clients.
+    # All four are inert against today's http:// upstream.
+    proxy_ssl_server_name on;
+    proxy_ssl_verify on;
+    proxy_ssl_trusted_certificate /etc/ssl/certs/ca-certificates.crt;
+    proxy_ssl_verify_depth 3;
     proxy_cache   globalcache;
   }
 
