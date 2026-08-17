@@ -63,10 +63,25 @@ config:
   logLevel: 4
   apiLocation: "https://projects.eao.gov.bc.ca"
   apiPath: "/api"
-  # searchApiPath: THE SWITCH that moves Project and Document search off eagle-api/Mongo and onto
+  # searchApiPath: the switch that moves Project and Document search off eagle-api/Mongo and onto
   # eagle-search (Azure AI Search). Absent — as it is now — templates/configmap.yaml emits an empty
   # SEARCH_API_PATH and the public bundle keeps asking eagle-api, which is the documented kill
   # switch and today's production behaviour.
+  #
+  # BUT THIS VALUE ONLY REACHES THE BROWSER WHILE PRODUCTION RUNS THE OLD IMAGE, and that is not a
+  # detail — it changes which switch to throw. `location = /api/config` in conf.d/server.conf.tmpl
+  # proxies to eagle-api, which serves the payload from the Mongo `Config` document
+  # (eagle-api api/controllers/config.js PUBLIC_KEYS). Measured 2026-08-17: test already behaves that
+  # way — its /api/config returns exactly eagle-api's 15 keys and SEARCH_API_PATH '', even though
+  # values-test.yaml sets searchApiPath: /eagle-search — while production still returns this
+  # ConfigMap's 18 keys, including API_LOCATION, KEYCLOAK_CLIENT_ID, ENGAGE_API_URL and the retired
+  # TYPESENSE_ENABLED, none of which eagle-api serves.
+  #
+  # So: deploying this chart to production moves the config source from here to the database. The
+  # search switch then lives in the prod `Config` document, not in this file, and the three extra
+  # keys above stop being served. None of them is load-bearing for eagle-public (API_LOCATION is
+  # dev-proxy only, the other two unused) and eagle-admin preserves KEYCLOAK_CLIENT_ID from its own
+  # env.js by design — but that is worth checking again before the deploy, not discovering after.
   #
   # DO NOT UNCOMMENT UNTIL ALL THREE ARE TRUE, in this order:
   #   1. the prod search estate is deployed (eagle-search azure/main.searchprod.bicep),
