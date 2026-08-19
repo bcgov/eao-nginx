@@ -82,9 +82,22 @@ config:
   #   db.epic.updateOne({ _schemaName: 'Config' }, { $set: { SEARCH_API_PATH: '/eagle-search' } })
   #   db.epic.updateOne({ _schemaName: 'Config' }, { $set: { SEARCH_API_PATH: '' } })
   # Empty is the documented kill switch: eagle-api/Mongo serves Project and Document search again.
-  # Do not flip until the prod index has had a FULL reindex and the counts have been checked — an
-  # empty index answers every query with zero results, which is indistinguishable from a working
-  # search that found nothing.
+  #
+  # BUT THE KILL SWITCH IS NOT THE ONLY GATE, and the `search:` value above is the reason. That
+  # field governs whether eagle-public CALLS /eagle-search/; it does not govern whether the path is
+  # OPEN. The moment this renders, `projects.eao.gov.bc.ca/eagle-search/search?dataset=Document`
+  # answers anonymously off the prod index, kill switch empty or not. That is a new public surface
+  # on production, so the order is:
+  #
+  #   1. digitalspace/eagle-search#17 merged and deployed to eagle-search-api-prod — it closes two
+  #      ACL defects and adds the leak suite.
+  #   2. Full reindex of the prod index, counts checked.
+  #   3. `node scripts/check-acl.js --diff` against prod, green.
+  #   4. This values change, then the Mongo flip.
+  #
+  # Steps 2 and 4 were already here; 1 and 3 are the ones that matter because THIS file is what
+  # makes the path reachable. The exposure is small today only because the prod chunk index is empty
+  # — and the reindex in step 2 is exactly what fills it.
   adminPath: "/admin/"
   keycloak:
     clientId: "eagle-api-console"
