@@ -59,20 +59,36 @@ resources:
     cpu: 30m
     memory: 25Mi
 
-# Application configuration served at /api/config
+# Application configuration served at /api/config — INERT ON THIS CHART VERSION, kept for prod.
+#
+# Nothing in conf.d/ or nginx.conf reads config.json any more. It is rendered by
+# templates/configmap.yaml and mounted by templates/deployment.yaml, and then never served: from
+# rproxy v2.7.11 `location = /api/config` proxies to eagle-api, which answers from Mongo. So on the
+# image test runs, EVERY key below is dead, not just the absent searchApiPath.
+#
+# The block stays because PROD IS THE EXCEPTION: prod runs v2.7.10, whose baked-in template still
+# serves the mounted file, so values-prod.yaml's copy is load-bearing until prod moves to v2.7.11+.
+# The templates are shared, so the block cannot be deleted for one environment only. Delete it —
+# and the volume, the mount and configmap.yaml — once prod is upgraded, not before.
 config:
   environment: "test"
   bannerColour: "orange"
   logLevel: 0
   apiLocation: "https://eagle-test.apps.silver.devops.gov.bc.ca"
   apiPath: "/api"
-  # Sends Project, Document and DocumentChunk search to eagle-search; everything else stays on
-  # eagle-api. Empty (the default everywhere else) means eagle-api for those too, which is the
-  # rollback: blank it with `oc edit configmap rproxy-config` and clients revert on next load.
+  # searchApiPath: DELIBERATELY ABSENT, as in values-prod.yaml — do not re-add it.
   #
-  # RELATIVE, and without `/api` — unlike the Azure preview app's value, which is a full
-  # `https://…/api` because it has no proxy in front of it. Here nginx supplies the /api.
-  searchApiPath: "/eagle-search"
+  # From eagle-api v2.10.63 and rproxy v2.7.11, `location = /api/config` proxies to eagle-api
+  # (conf.d/server.conf.tmpl), which serves the payload from the Mongo `Config` document. Both
+  # preconditions have held in test since 2026-08-17, so this key reached nobody: the ConfigMap said
+  # "/eagle-search" while /api/config served eagle-api's own keys, and for weeks the live value there
+  # was "" — test search fell back to eagle-api's Mongo search with this file claiming otherwise.
+  # It has since been set: as of 2026-08-19 test's /api/config returns SEARCH_API_PATH
+  # "/eagle-search". Neither value was ever this file's to state.
+  #
+  # The live switch and its rollback are one Mongo field, no rollout either way:
+  #   db.epic.updateOne({ _schemaName: 'Config' }, { $set: { SEARCH_API_PATH: '/eagle-search' } })
+  #   db.epic.updateOne({ _schemaName: 'Config' }, { $set: { SEARCH_API_PATH: '' } })
   adminPath: "/admin/"
   keycloak:
     clientId: "eagle-api-console"
