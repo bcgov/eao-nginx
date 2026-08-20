@@ -134,8 +134,10 @@ server {
   # CORS, and keeps the Azure hostname off the page.
   #
   # PATH REWRITE. Trailing slashes on both sides, so /eagle-search/search?… reaches the upstream as
-  # /api/search?…. eagle-public sends SEARCH_API_PATH=/eagle-search (from the ConfigMap) and appends
-  # `search?…` itself.
+  # /api/search?…. eagle-public sends SEARCH_API_PATH=/eagle-search and appends `search?…` itself.
+  # That value comes from eagle-api's Mongo `Config` document, NOT from this chart's ConfigMap — see
+  # the SEARCH_API_PATH note in helm/rproxy/values-prod.yaml. The ConfigMap wording here predates
+  # that move and would send someone editing values files to flip a switch that is not there.
   #
   # NOT /search-api/ — that path existed here and was removed in d7dc62c, "remove /search-api direct
   # Typesense exposure". Reusing the name would make that commit read as reverted.
