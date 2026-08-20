@@ -66,13 +66,17 @@ config:
   logLevel: 0
   apiLocation: "https://eagle-test.apps.silver.devops.gov.bc.ca"
   apiPath: "/api"
-  # Sends Project, Document and DocumentChunk search to eagle-search; everything else stays on
-  # eagle-api. Empty (the default everywhere else) means eagle-api for those too, which is the
-  # rollback: blank it with `oc edit configmap rproxy-config` and clients revert on next load.
+  # searchApiPath: DELIBERATELY ABSENT, as in values-prod.yaml — do not re-add it.
   #
-  # RELATIVE, and without `/api` — unlike the Azure preview app's value, which is a full
-  # `https://…/api` because it has no proxy in front of it. Here nginx supplies the /api.
-  searchApiPath: "/eagle-search"
+  # From eagle-api v2.10.63 and rproxy v2.7.11, `location = /api/config` proxies to eagle-api, which
+  # serves the payload from the Mongo `Config` document. Both preconditions have held in test since
+  # 2026-08-17, so this key has been inert: /api/config returned eagle-api's 15 keys with
+  # SEARCH_API_PATH "" while this file still said "/eagle-search", and test search silently fell
+  # back to eagle-api's Mongo search for weeks with the ConfigMap claiming otherwise.
+  #
+  # The live switch and its rollback are one Mongo field, no rollout either way:
+  #   db.epic.updateOne({ _schemaName: 'Config' }, { $set: { SEARCH_API_PATH: '/eagle-search' } })
+  #   db.epic.updateOne({ _schemaName: 'Config' }, { $set: { SEARCH_API_PATH: '' } })
   adminPath: "/admin/"
   keycloak:
     clientId: "eagle-api-console"
