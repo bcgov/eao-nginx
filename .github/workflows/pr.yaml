@@ -117,7 +117,11 @@ jobs:
             rproxy:authcheck
           for i in $(seq 20); do
             [ "$(docker inspect -f '{{.State.Running}}' authcheck)" = true ] || break
-            curl -sf -o /dev/null http://localhost:18085/nginx_status 2>/dev/null && break
+            # NOT /nginx_status: it is gated `allow 10.0.0.0/8; allow 127.0.0.1; deny all`, and a
+            # request through `-p` arrives from the bridge gateway (172.17.0.1), so every poll 403s,
+            # `curl -sf` fails, and the loop runs all 20 sleeps without ever detecting readiness.
+            # Any status at all off `/` means nginx is answering; 401 is the expected one here.
+            [ "$(curl -s -o /dev/null -w '%{http_code}' http://localhost:18085/)" != 000 ] && break
             sleep 1
           done
           rc=0
@@ -204,13 +208,15 @@ jobs:
             else
               echo "  $tag OK"
             fi
-            checked=$((checked + 1))
+            # WORKING_TREE deliberately does NOT count. It is present on every run, so counting it
+            # would make the floor check below unreachable and silently revert it.
+            [ "$tag" = WORKING_TREE ] || checked=$((checked + 1))
           done
           # A floor that matches nothing checks nothing, prints nothing and exits 0 — the same
           # silent pass this guard replaced. If MIN_TAG is ever deleted, retagged or mistyped, say
           # so loudly instead.
           if [ "$checked" -eq 0 ]; then
-            echo "::error::no tags at or above MIN_TAG=$MIN_TAG were examined — the guard checked nothing"
+            echo "::error::no RELEASED tags at or above MIN_TAG=$MIN_TAG were examined — the guard checked only the working tree"
             exit 1
           fi
           echo "  checked $checked tag(s) from $MIN_TAG up"
