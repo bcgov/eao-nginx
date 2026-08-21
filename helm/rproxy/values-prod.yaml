@@ -73,13 +73,33 @@ config:
   # only once eagle-api is on v2.10.63+ AND the rproxy image is on v2.7.11+. Up to v2.7.10 the
   # template still served this path with `alias /etc/nginx/config/config.json`, so the rproxy image
   # must never lead eagle-api — deploy rproxy first and /api/config 404s until eagle-api catches up,
-  # which white-screens eagle-admin. Measured 2026-08-17: test already behaves that
-  # way — its /api/config returns eagle-api's 15 keys with SEARCH_API_PATH '' even though
-  # values-test.yaml sets searchApiPath: /eagle-search — while production still returned this
-  # ConfigMap's 18 keys, including API_LOCATION, KEYCLOAK_CLIENT_ID, ENGAGE_API_URL and the retired
-  # TYPESENSE_ENABLED. None of those three is load-bearing (API_LOCATION is dev-proxy only, the other
-  # two unused, and eagle-admin preserves KEYCLOAK_CLIENT_ID from its own env.js) — but check that
-  # again before the deploy, not after.
+  # which white-screens eagle-admin.
+  #
+  # THAT WARNING IS NOW HISTORICAL, BOTH CONDITIONS SATISFIED. It is kept because it is the reason
+  # the sequencing was safe, and because it binds again in reverse: any rollback that takes the
+  # rproxy image below v2.7.11 needs /api/config to come back to this file with it. As of
+  # 2026-08-21 prod eagle-api is v2.10.65 and prod rproxy is v2.7.12; the /api/config move landed in
+  # rproxy v2.7.11 and prod crossed it on 2026-08-20.
+  #
+  # The measurement recorded here was taken on 2026-08-17 and has since been overtaken. It said test
+  # already served eagle-api's 15 keys "while production still returned this ConfigMap's 18 keys".
+  # The first half still holds; the second stopped being true on 2026-08-20. Re-measured 2026-08-21,
+  # prod /api/config returns eagle-api's 15 keys with SEARCH_API_PATH '/eagle-search'.
+  #
+  # THE ARITHMETIC, because the key sets are easy to state wrongly. The 18-key payload prod served
+  # until 2026-08-20 was the v2.7.10 ConfigMap. Four of its keys are absent from what eagle-api
+  # returns: API_LOCATION, KEYCLOAK_CLIENT_ID, TYPESENSE_ENABLED and ENGAGE_API_URL. eagle-api adds
+  # SEARCH_API_PATH. 18 - 4 + 1 = 15.
+  #
+  # Do not read that four-key list as a description of THIS chart: TYPESENSE_ENABLED left
+  # configmap.yaml in v2.7.11 (81843b3, "drop the typesense proxy and config"), so the ConfigMap
+  # rendered here carries 18 keys including SEARCH_API_PATH and NOT TYPESENSE_ENABLED. Grep this
+  # chart for the four and you will find three.
+  #
+  # None of the four is load-bearing — API_LOCATION is dev-proxy only, TYPESENSE_ENABLED is retired,
+  # ENGAGE_API_URL is unused, and eagle-admin preserves KEYCLOAK_CLIENT_ID from its own env.js — and
+  # prod has run without them since 2026-08-20 with no breakage. So every key in this block is now
+  # rendered, mounted and read by nobody.
   #
   # The flip and its rollback are one Mongo field, no rollout either way:
   #   db.epic.updateOne({ _schemaName: 'Config' }, { $set: { SEARCH_API_PATH: '/eagle-search' } })
