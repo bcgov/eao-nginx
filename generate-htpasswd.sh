@@ -29,8 +29,5 @@ generate_htpasswd "${USERNAME}" "${PASSWORD}" "/tmp/.htpasswd"
 # E-guide endpoint (/eguide) - used in prod only
 generate_htpasswd "${USERNAME1}" "${PASSWORD1}" "/tmp/.htpasswd1"
 
-# Public endpoint (legacy /public path) - used in dev/test
-generate_htpasswd "${USERNAME2}" "${PASSWORD2}" "/tmp/.htpasswd2"
-
 echo "HTTP Basic Auth setup complete"
 exit 0

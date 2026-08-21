@@ -34,7 +34,6 @@ nginx:
       root: "http://eagle-public:8080"
       api: "http://eagle-api:3000"
       admin: "http://eagle-admin:8080"
-      public: "http://eagle-public:8080"
       eguide: "http://eagle-api:3000"
       analytics: "http://penguin-analytics-api:3000"
       certbot: "http://certbot:8080"
@@ -54,13 +53,6 @@ httpBasic:
   
   # E-guide endpoint auth (HTTP_BASIC1)
   eguide:
-    enabled: false
-    directive: ""
-    username: ""
-    password: ""
-  
-  # Public endpoint auth (HTTP_BASIC2)
-  public:
     enabled: false
     directive: ""
     username: ""

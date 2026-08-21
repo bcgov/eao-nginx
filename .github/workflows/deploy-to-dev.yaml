@@ -147,8 +147,6 @@ jobs:
             --set image.tag=dev \
             --set httpBasic.username=${{ secrets.RPROXY_USERNAME }} \
             --set httpBasic.password=${{ secrets.RPROXY_PASSWORD }} \
-            --set httpBasic.public.username=${{ secrets.RPROXY_USERNAME }} \
-            --set httpBasic.public.password=${{ secrets.RPROXY_PASSWORD }} \
             --wait \
             --timeout 5m
 
