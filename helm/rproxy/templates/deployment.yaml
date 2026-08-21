@@ -64,6 +64,15 @@ spec:
               value: {{ .Values.httpBasic.eguide.username | quote }}
             - name: PASSWORD1
               value: {{ .Values.httpBasic.eguide.password | quote }}
+            # KEPT DELIBERATELY THOUGH server.conf.tmpl NO LONGER REFERENCES THEM. The chart is
+            # rendered from the DEFAULT BRANCH at deploy time (deploy-to-prod.yaml checks out with
+            # no `ref:`) while `--set image.tag` selects an older image. Every released tag
+            # v2.7.6-v2.7.12 bakes a template that still expands ${HTTP_BASIC2} and
+            # ${NGINX__EPIC__PROXY__PUBLIC}, and the nginx entrypoint's envsubst leaves an UNSET
+            # variable as a literal — which nginx then parses as a directive and refuses to start:
+            # `[emerg] unexpected "}"`. Dropping these breaks every deploy of, and every rollback
+            # to, an existing tag. They cost nothing here; remove them only once no deployable tag
+            # references them.
             - name: HTTP_BASIC2
               value: {{ .Values.httpBasic.public.directive | quote }}
             - name: USERNAME2
@@ -84,6 +93,7 @@ spec:
               value: {{ .Values.nginx.epic.proxy.api | quote }}
             - name: NGINX__EPIC__PROXY__ADMIN
               value: {{ .Values.nginx.epic.proxy.admin | quote }}
+            # Kept for the same reason as HTTP_BASIC2 above: released images still expand it.
             - name: NGINX__EPIC__PROXY__PUBLIC
               value: {{ .Values.nginx.epic.proxy.public | quote }}
             - name: NGINX__EPIC__PROXY__EGUIDE
