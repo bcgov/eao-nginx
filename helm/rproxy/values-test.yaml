@@ -25,15 +25,19 @@ httpBasic:
   username: ""
   password: ""
   
-  public:
-    enabled: true
-    directive: "auth_basic \"Restricted Content\"; auth_basic_user_file /tmp/.htpasswd2;"
-    username: ""
-    password: ""
 
   eguide:
     enabled: false
     directive: ""
+    username: ""
+    password: ""
+
+  # Public endpoint auth (HTTP_BASIC2). No /public block exists in server.conf.tmpl any more,
+  # but released images v2.7.7-v2.7.12 still render one — keep these until no deployable
+  # tag does.
+  public:
+    enabled: true
+    directive: "auth_basic \"Restricted Content\"; auth_basic_user_file /tmp/.htpasswd2;"
     username: ""
     password: ""
 

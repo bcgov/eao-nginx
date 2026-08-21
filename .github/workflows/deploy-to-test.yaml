@@ -151,6 +151,11 @@ jobs:
             --set image.tag=test \
             --set httpBasic.username=${{ secrets.RPROXY_USERNAME }} \
             --set httpBasic.password=${{ secrets.RPROXY_PASSWORD }} \
+            # Still supplied though server.conf.tmpl no longer has a /public block: released
+            # images v2.7.7-v2.7.12 still do, and without USERNAME2/PASSWORD2 their entrypoint
+            # never writes /tmp/.htpasswd2 — so /public 403s on any rollback to them.
+            --set httpBasic.public.username=${{ secrets.RPROXY_USERNAME }} \
+            --set httpBasic.public.password=${{ secrets.RPROXY_PASSWORD }} \
             --wait \
             --timeout 5m
 

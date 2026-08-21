@@ -98,8 +98,19 @@ jobs:
           helm template rproxy ./helm/rproxy -f helm/rproxy/values-prod.yaml \
             | grep -oE '^[[:space:]]+- name: [A-Z_0-9]+' | awk '{print $3}' | sort -u > /tmp/chart-env.txt
           rc=0
+          # EVERY tag at or above MIN_TAG, not "the last N". An earlier version used `tail -6`,
+          # which silently excluded v2.7.6 — the one tag that actually fails this check — so the
+          # guard exited 0 on the case it exists to catch. A window defined by a magic number
+          # cannot be reasoned about; a floor with a stated reason can.
+          #
+          # MIN_TAG is v2.7.7 because v2.7.6 expands ${NGINX__EPIC__PROXY__TYPESENSE}, and the
+          # Typesense estate was deleted on 2026-08-21 — dev, test and prod. Rolling back to it
+          # would proxy at a service that no longer exists, so it is not a deployable target and
+          # the chart is not required to satisfy it.
+          MIN_TAG=v2.7.7
           for tag in $(git for-each-ref --format='%(refname:short)' refs/tags \
-                        | grep -E '^v[0-9]+\.[0-9]+\.[0-9]+$' | sort -V | tail -6); do
+                        | grep -E '^v[0-9]+\.[0-9]+\.[0-9]+$' | sort -V \
+                        | awk -v min="$MIN_TAG" 'min=="" || $0==min {p=1} p'); do
             git show "$tag:conf.d/server.conf.tmpl" 2>/dev/null \
               | grep -o '\${[A-Z_0-9]*}' | tr -d '${}' | sort -u > /tmp/tag-vars.txt || continue
             missing=$(comm -23 /tmp/tag-vars.txt /tmp/chart-env.txt | tr '\n' ' ')

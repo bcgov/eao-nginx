@@ -295,7 +295,13 @@ server {
   # `location /public` and `location /lib` used to sit here, each with its own proxy_pass. Both are
   # gone: /, /public and /lib all returned a byte-identical Angular shell (md5 0f0e86926b29,
   # measured on prod), because none of them is distinct content — they fall through to index.html.
-  # They now reach `location /` instead, which is provably the same response from one upstream.
+  # They now reach `location /` instead — same upstream, same URI, same response body.
+  #
+  # ONE BEHAVIOUR CHANGE, in dev and test only: `/lib` was anonymously reachable because the old
+  # block carried no ${HTTP_BASIC}, and it now inherits `location /`'s basic auth. Measured on
+  # dev values — before: / 401, /public 401, /lib 200; after: all three 401, and all three 200
+  # with credentials. Prod is unaffected: httpBasic is disabled there, so all three were and
+  # remain 200 anonymously. This tightens dev/test rather than widening anything.
 
   # For status of ngnix service
   location /nginx_status {
