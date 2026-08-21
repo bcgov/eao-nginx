@@ -11,6 +11,7 @@ nginx:
       root: "http://eagle-public:8080"
       api: "http://eagle-api:3000"
       admin: "http://eagle-admin:8080"
+      public: "http://eagle-public:8080"
       eguide: "http://eagle-api:3000"
       analytics: "http://penguin-analytics-api:3000"  # Production does not have analytics configured
       certbot: "http://certbot:8080"
@@ -30,6 +31,12 @@ httpBasic:
   
   # E-guide endpoint requires authentication in production
   # Credentials injected via GitHub secrets - do NOT hardcode
+  public:
+    enabled: false
+    directive: ""
+    username: ""
+    password: ""
+
   eguide:
     enabled: true
     directive: "auth_basic \"Restricted Content\"; auth_basic_user_file /tmp/.htpasswd1;"

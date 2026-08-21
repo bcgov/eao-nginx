@@ -84,6 +84,34 @@ jobs:
           render_and_test "http://localhost:9999"
           echo "✓ rendered config passes nginx -t"
 
+      # THE CHART MUST SATISFY EVERY DEPLOYABLE IMAGE, NOT JUST THIS COMMIT'S TEMPLATE.
+      # deploy-to-{test,prod}.yaml check out with no `ref:`, so they render the DEFAULT BRANCH's
+      # chart while `--set image.tag` selects an older image. If the chart stops supplying a
+      # variable a released template still expands, the entrypoint's envsubst leaves it as a
+      # literal, nginx parses it as a directive and refuses to start with `[emerg] unexpected "}"`.
+      # That breaks every deploy of, and rollback to, that tag. The `nginx -t` step above cannot
+      # catch it: it supplies its own env by hand rather than deriving it from the chart.
+      - name: Chart supplies every variable released templates expand
+        run: |
+          set -euo pipefail
+          git fetch --tags --quiet --force
+          helm template rproxy ./helm/rproxy -f helm/rproxy/values-prod.yaml \
+            | grep -oE '^[[:space:]]+- name: [A-Z_0-9]+' | awk '{print $3}' | sort -u > /tmp/chart-env.txt
+          rc=0
+          for tag in $(git for-each-ref --format='%(refname:short)' refs/tags \
+                        | grep -E '^v[0-9]+\.[0-9]+\.[0-9]+$' | sort -V | tail -6); do
+            git show "$tag:conf.d/server.conf.tmpl" 2>/dev/null \
+              | grep -o '\${[A-Z_0-9]*}' | tr -d '${}' | sort -u > /tmp/tag-vars.txt || continue
+            missing=$(comm -23 /tmp/tag-vars.txt /tmp/chart-env.txt | tr '\n' ' ')
+            if [ -n "$missing" ]; then
+              echo "::error::chart does not supply, for image tag $tag: $missing"
+              rc=1
+            else
+              echo "  $tag OK"
+            fi
+          done
+          exit $rc
+
       - name: Validate Helm chart
         run: |
           # Check Helm chart structure
