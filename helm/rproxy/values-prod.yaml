@@ -15,12 +15,18 @@ nginx:
       eguide: "http://eagle-api:3000"
       analytics: "http://penguin-analytics-api:3000"  # Production does not have analytics configured
       certbot: "http://certbot:8080"
-      # eagle-search on Azure. Bare host — the /api is added by the proxy_pass in
-      # server.conf.tmpl, exactly as in values-test.yaml. Host is the `searchApiHostName` output of
-      # the prod search estate deployed 2026-08-18 (eagle-search azure/main.searchprod.bicep), never
-      # composed by hand. Without it templates/deployment.yaml renders the http://localhost:9999
-      # sentinel and `location ^~ /eagle-search/` 502s.
-      search: "https://eagle-search-api-prod.azurewebsites.net"
+      # eagle-search on Azure — DELIBERATELY EMPTY, see the SEARCH_API_PATH note further down.
+      # Empty makes templates/deployment.yaml render the http://localhost:9999 sentinel, so
+      # `location ^~ /eagle-search/` returns 502 instead of proxying. An absent key does the same
+      # thing; the key is kept present so that the decision is on the record rather than looking
+      # like an omission.
+      #
+      # The value that belongs here when the path is reopened is the `searchApiHostName` output of
+      # the prod search estate deployed 2026-08-18 (eagle-search azure/main.searchprod.bicep) —
+      # "https://eagle-search-api-prod.azurewebsites.net", a bare host, because the /api is added by
+      # the proxy_pass in server.conf.tmpl, exactly as in values-test.yaml. Never composed by hand.
+      # Do not restore it until the two skipped ACL preconditions listed below are done and green.
+      search: ""
 
 httpBasic:
   # Main endpoint auth disabled in production
@@ -81,26 +87,37 @@ config:
   # two unused, and eagle-admin preserves KEYCLOAK_CLIENT_ID from its own env.js) — but check that
   # again before the deploy, not after.
   #
-  # The flip and its rollback are one Mongo field, no rollout either way:
-  #   db.epic.updateOne({ _schemaName: 'Config' }, { $set: { SEARCH_API_PATH: '/eagle-search' } })
+  # THE FLIP ALREADY HAPPENED, ON 2026-08-20. Prod /api/config is served by eagle-api out of Mongo
+  # and returns SEARCH_API_PATH "/eagle-search", so eagle-public is pointed at the path. Setting
+  # `search: ""` above closes the path itself; it does not change what /api/config says.
+  #
+  # The Mongo half, and its rollback, are one field, no rollout either way:
   #   db.epic.updateOne({ _schemaName: 'Config' }, { $set: { SEARCH_API_PATH: '' } })
+  #   db.epic.updateOne({ _schemaName: 'Config' }, { $set: { SEARCH_API_PATH: '/eagle-search' } })
   # Empty is the documented kill switch: eagle-api/Mongo serves Project and Document search again.
   #
-  # BUT THE KILL SWITCH IS NOT THE ONLY GATE, and the `search:` value above is the reason. That
-  # field governs whether eagle-public CALLS /eagle-search/; it does not govern whether the path is
-  # OPEN. The moment this renders, `projects.eao.gov.bc.ca/eagle-search/search?dataset=Document`
-  # answers anonymously off the prod index, kill switch empty or not. That is a new public surface
-  # on production, so the order is:
+  # THE KILL SWITCH WAS NEVER THE ONLY GATE, and the `search:` value above is the reason. That field
+  # governs whether the path is OPEN; SEARCH_API_PATH governs whether eagle-public CALLS it. While
+  # `search:` held a real host the path answered anonymously off the prod index, kill switch empty
+  # or not. Measured on prod 2026-08-21:
+  #
+  #   GET https://projects.eao.gov.bc.ca/eagle-search/search?dataset=DocumentChunk  →  200
+  #
+  # with no credentials, over an index holding 358 projects, 61,582 documents and 1,128,576 chunks,
+  # returning document full text and each row's read[] grants. That is a public surface on
+  # production, and it is what this key being empty removes.
+  #
+  # The order that was supposed to be followed, and what actually happened:
   #
   #   1. digitalspace/eagle-search#17 merged and deployed to eagle-search-api-prod — it closes two
-  #      ACL defects and adds the leak suite.
-  #   2. Full reindex of the prod index, counts checked.
-  #   3. `node scripts/check-acl.js --diff` against prod, green.
-  #   4. This values change, then the Mongo flip.
+  #      ACL defects and adds the leak suite.                    NOT DONE.
+  #   2. Full reindex of the prod index, counts checked.         DONE — the counts above are it.
+  #   3. `node scripts/check-acl.js --diff` against prod, green. NEVER RUN.
+  #   4. This values change, then the Mongo flip.                DONE 2026-08-20, both halves.
   #
-  # Steps 2 and 4 were already here; 1 and 3 are the ones that matter because THIS file is what
-  # makes the path reachable. The exposure is small today only because the prod chunk index is empty
-  # — and the reindex in step 2 is exactly what fills it.
+  # So the real order was 2, then 4, with 1 and 3 — the two steps that were the whole point — never
+  # met. An earlier note here said the exposure was small "because the prod chunk index is empty";
+  # that was true when it was written and step 2 is exactly what stopped it being true.
   adminPath: "/admin/"
   keycloak:
     clientId: "eagle-api-console"
