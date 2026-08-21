@@ -8,7 +8,25 @@ nginx:
   epic:
     serverName: "epic-6cdc9e-prod.apps.silver.devops.gov.bc.ca"
     proxy:
-      root: "http://eagle-public:8080"
+      # Azure Front Door, not the in-cluster eagle-public Service. This hostname is the prod AFD
+      # endpoint in resource group rg-eagle-public-prod (profile eagle-edge-prod, storage
+      # eaglepubprodrhj3zycszo6j, subscription be5924ac-1083-4a1b-be92-7b444882cfd9), read back from
+      # Azure. Never compose it by hand.
+      #
+      # THE ZONE CODE IS a01, AND A WRONG ONE DOES NOT FAIL LOUDLY. A hand-composed
+      # ...z01.azurefd.net name still resolves — the *.z01.azurefd.net Traffic Manager wildcard
+      # answers it at 150.171.110.146 — and returns HTTP 404. Combined with the fact that proxy_pass
+      # in `location /` holds a literal name that nginx resolves once at config load, a
+      # one-character typo here 404s EVERY page while /nginx_status and the readiness probe stay
+      # green and the rollout reports success.
+      #
+      # No trailing slash and no path. `location /` proxy_passes without a trailing slash, so
+      # anything appended here would be prefixed onto every request URI.
+      #
+      # REQUIRES AN IMAGE BUILT FROM commit 5971894 (proxy_ssl_server_name on, /public and /lib
+      # removed). As of this commit that commit is in NO released tag — master is v2.7.12 plus
+      # 5971894 — so a tag has to be cut and deployed before this value is safe to render.
+      root: "https://eagle-public-prod-aafug4ahavgzbvh9.a01.azurefd.net"
       api: "http://eagle-api:3000"
       admin: "http://eagle-admin:8080"
       public: "http://eagle-public:8080"
