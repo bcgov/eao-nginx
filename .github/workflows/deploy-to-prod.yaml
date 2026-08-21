@@ -90,8 +90,19 @@ jobs:
     runs-on: ubuntu-latest
     needs: [validate, tag]
     steps:
+      # PINNED TO THE VERSION TAG ON PURPOSE. Without `ref:` this checked out the default branch,
+      # so `helm upgrade` rendered the chart and values from master HEAD while --set image.tag=prod
+      # selected the tagged image. That skew made "redeploy the previous tag" not a rollback for
+      # anything values-level: the image went back, the values stayed wherever master had them.
+      #
+      # With the pin, chart, values and image all come from one tag, and rollback means what it
+      # says. The trade is that a values-only change on master no longer reaches prod on the next
+      # deploy of an existing tag — it needs a tag cut. That is the point, but it does mean an
+      # urgent values fix has to be tagged, not just merged.
       - name: Checkout
         uses: actions/checkout@v6
+        with:
+          ref: ${{ inputs.version }}
 
       - name: Install OpenShift CLI
         run: |
