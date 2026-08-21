@@ -84,6 +84,59 @@ jobs:
           render_and_test "http://localhost:9999"
           echo "✓ rendered config passes nginx -t"
 
+      # nginx -t proves the config PARSES. It does not prove the auth directive is still in it.
+      # Deleting the single ${HTTP_BASIC} line from `location /` leaves every step above green,
+      # and since /public and /lib now fall through to that block, one deleted line un-gates three
+      # paths in dev and test instead of one. So: start the dev shape and demand a 401.
+      - name: The root location is auth-gated when a directive is supplied
+        run: |
+          set -euo pipefail
+          # The REAL image, not nginx:1.27-alpine with the script mounted in. generate-htpasswd.sh
+          # needs openssl, which the Dockerfile installs and the stock image does not have — mount
+          # it into the stock image and generation silently fails, nginx cannot read the htpasswd
+          # file, and every authenticated request 403s. That still satisfies a naive "not 401"
+          # assertion, so the check would pass on completely broken auth wiring.
+          docker build -q -t rproxy:authcheck . >/dev/null
+          docker run -d --name authcheck -p 18085:8080 \
+            --add-host eagle-public:127.0.0.1 --add-host eagle-api:127.0.0.1 \
+            --add-host eagle-admin:127.0.0.1 --add-host penguin-analytics-api:127.0.0.1 \
+            --add-host certbot:127.0.0.1 --add-host eagle-search.example.test:127.0.0.1 \
+            -e NGINX__EPIC__SERVER_NAME=example.test \
+            -e NGINX__AJAX__SERVER_NAME=ajax.example.test -e NGINX__AJAX__REDIRECT=example.test/x \
+            -e NGINX__EPIC__PROXY__ROOT=http://127.0.0.1:9 \
+            -e NGINX__EPIC__PROXY__API=http://eagle-api:3000 \
+            -e NGINX__EPIC__PROXY__ADMIN=http://eagle-admin:8080 \
+            -e NGINX__EPIC__PROXY__PUBLIC=http://eagle-public:8080 \
+            -e NGINX__EPIC__PROXY__EGUIDE=http://eagle-api:3000 \
+            -e NGINX__EPIC__PROXY__ANALYTICS=http://penguin-analytics-api:3000 \
+            -e NGINX__EPIC__PROXY__CERTBOT=http://certbot:8080 \
+            -e NGINX__EPIC__PROXY__SEARCH=http://localhost:9999 \
+            -e HTTP_BASIC='auth_basic "Restricted Content"; auth_basic_user_file /tmp/.htpasswd;' \
+            -e HTTP_BASIC1= -e HTTP_BASIC2= \
+            -e USERNAME=ci -e PASSWORD=ci-secret \
+            rproxy:authcheck
+          for i in $(seq 20); do
+            [ "$(docker inspect -f '{{.State.Running}}' authcheck)" = true ] || break
+            curl -sf -o /dev/null http://localhost:18085/nginx_status 2>/dev/null && break
+            sleep 1
+          done
+          rc=0
+          anon=$(curl -s -o /dev/null -w '%{http_code}' http://localhost:18085/)
+          auth=$(curl -s -u ci:ci-secret -o /dev/null -w '%{http_code}' http://localhost:18085/)
+          echo "  anonymous / -> $anon ; authenticated / -> $auth"
+          [ "$anon" = 401 ] || { echo "::error::location / served $anon anonymously; the auth directive is gone"; rc=1; }
+          # 403 means nginx could not read the htpasswd file, so auth is not actually working —
+          # accepting it would let this check pass on broken wiring. 502 is the expected success
+          # here: credentials accepted, upstream deliberately dead.
+          # Exactly 502, nothing looser. ROOT points at a closed port, so a request that reaches the
+          # proxy_pass can only fail to connect — which proves the credential was accepted AND that
+          # the request got past the auth phase. 401/403 mean auth rejected it (403 specifically =
+          # nginx could not read the htpasswd file), and a "not 401" assertion would pass on that.
+          [ "$auth" = 502 ] || { echo "::error::valid credentials got $auth, expected 502 from the dead upstream — auth is not accepting them"; rc=1; }
+          docker logs authcheck 2>&1 | tail -5
+          docker rm -f authcheck >/dev/null
+          exit $rc
+
       # THE CHART MUST SATISFY EVERY DEPLOYABLE IMAGE, NOT JUST THIS COMMIT'S TEMPLATE.
       # deploy-to-{test,prod}.yaml check out with no `ref:`, so they render the DEFAULT BRANCH's
       # chart while `--set image.tag` selects an older image. If the chart stops supplying a
@@ -126,11 +179,20 @@ jobs:
           # the chart is not required to satisfy it.
           MIN_TAG=v2.7.7
           checked=0
-          for tag in $(git for-each-ref --format='%(refname:short)' refs/tags \
+          # WORKING-TREE FIRST, then the released tags. Checking only released tags catches a
+          # variable REMOVED from the chart, but not one ADDED to the template — which is the
+          # commoner mistake: a developer adds `location /x { proxy_pass ${NGINX__..._X}; }` and
+          # forgets deployment.yaml. That passes every other check here and then the pod dies with
+          # `[emerg] unknown "nginx__..._x" variable`. HEAD's variable set being a subset of the
+          # released union is incidental today; it lapses the first time someone adds one.
+          for tag in WORKING_TREE $(git for-each-ref --format='%(refname:short)' refs/tags \
                         | grep -E '^v[0-9]+\.[0-9]+\.[0-9]+$' | sort -V \
                         | awk -v min="$MIN_TAG" 'min=="" || $0==min {p=1} p'); do
-            git show "$tag:conf.d/server.conf.tmpl" 2>/dev/null \
-              | grep -o '\${[A-Z_0-9]*}' | tr -d '${}' | sort -u > /tmp/tag-vars.txt || continue
+            if [ "$tag" = WORKING_TREE ]; then
+              cat conf.d/server.conf.tmpl
+            else
+              git show "$tag:conf.d/server.conf.tmpl" 2>/dev/null
+            fi | grep -o '\${[A-Z_0-9]*}' | tr -d '${}' | sort -u > /tmp/tag-vars.txt || continue
             missing=$(comm -23 /tmp/tag-vars.txt /tmp/chart-env.txt | tr '\n' ' ')
             # An upstream the chart renders as "" is as fatal as one it omits entirely.
             blank=$(grep -E 'PROXY__' /tmp/tag-vars.txt | sort -u \
