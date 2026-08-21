@@ -63,17 +63,23 @@ resources:
     cpu: 30m
     memory: 25Mi
 
-# Application configuration served at /api/config — INERT ON THIS CHART VERSION, kept for prod.
+# Application configuration served at /api/config — INERT ON THIS CHART VERSION, kept for rollback.
 #
 # Nothing in conf.d/ or nginx.conf reads config.json any more. It is rendered by
 # templates/configmap.yaml and mounted by templates/deployment.yaml, and then never served: from
 # rproxy v2.7.11 `location = /api/config` proxies to eagle-api, which answers from Mongo. So on the
 # image test runs, EVERY key below is dead, not just the absent searchApiPath.
 #
-# The block stays because PROD IS THE EXCEPTION: prod runs v2.7.10, whose baked-in template still
-# serves the mounted file, so values-prod.yaml's copy is load-bearing until prod moves to v2.7.11+.
-# The templates are shared, so the block cannot be deleted for one environment only. Delete it —
-# and the volume, the mount and configmap.yaml — once prod is upgraded, not before.
+# PROD IS NO LONGER THE EXCEPTION. That was written when prod ran v2.7.10, whose baked-in template
+# still served the mounted file, which made values-prod.yaml's copy load-bearing. Prod has run
+# v2.7.12 since 2026-08-20 and the /api/config move landed in v2.7.11, so that copy is inert too and
+# no environment reads config.json any more.
+#
+# The block stays for a different reason now: ROLLBACK. Every released tag up to v2.7.10 bakes a
+# template that serves the mounted file, so deleting this — and the volume, the mount and
+# configmap.yaml — would make a rollback that far 404 /api/config and white-screen eagle-admin. The
+# templates are shared, so it cannot be deleted for one environment only either. Delete it once no
+# deployable tag is below v2.7.11, not before.
 config:
   environment: "test"
   bannerColour: "orange"
