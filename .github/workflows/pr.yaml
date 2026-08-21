@@ -165,18 +165,27 @@ jobs:
           # — empty is legitimate and means "no auth here", which is exactly how prod renders them.
           # So: every name must be present, and every upstream (NGINX__*PROXY__*) must also be
           # non-empty.
-          helm template rproxy ./helm/rproxy -f helm/rproxy/values-prod.yaml \
-            | awk '/^[[:space:]]+- name: [A-Z_0-9]+$/ { n=$3; next }
-                   n != "" {
-                     if ($0 ~ /^[[:space:]]+value:/) {
-                       v=$0; sub(/^[[:space:]]*value:[[:space:]]*/,"",v); gsub(/^"|"$/,"",v)
-                       print n > "/tmp/chart-env.txt"
-                       if (v != "") print n > "/tmp/chart-nonempty.txt"
-                     }
-                     n=""
-                   }'
-          sort -u -o /tmp/chart-env.txt /tmp/chart-env.txt
-          sort -u -o /tmp/chart-nonempty.txt /tmp/chart-nonempty.txt
+          # EVERY environment, not just prod. Rendering values-prod.yaml alone left the same
+          # [emerg] crash-loop shippable to dev and test: an upstream emptied in values-dev.yaml
+          # only is invisible to a prod render, and dev is where a broken rproxy is most likely to
+          # be introduced. Each env is rendered separately rather than intersected so the error can
+          # name the file to fix — "the chart is missing X" sends someone to the wrong values file.
+          ENVS="dev test prod"
+          for e in $ENVS; do
+            : > "/tmp/chart-env.$e.txt"; : > "/tmp/chart-nonempty.$e.txt"
+            helm template rproxy ./helm/rproxy -f "helm/rproxy/values-$e.yaml" \
+              | awk -v env="$e" '/^[[:space:]]+- name: [A-Z_0-9]+$/ { n=$3; next }
+                     n != "" {
+                       if ($0 ~ /^[[:space:]]+value:/) {
+                         v=$0; sub(/^[[:space:]]*value:[[:space:]]*/,"",v); gsub(/^"|"$/,"",v)
+                         print n > ("/tmp/chart-env." env ".txt")
+                         if (v != "") print n > ("/tmp/chart-nonempty." env ".txt")
+                       }
+                       n=""
+                     }'
+            sort -u -o "/tmp/chart-env.$e.txt" "/tmp/chart-env.$e.txt"
+            sort -u -o "/tmp/chart-nonempty.$e.txt" "/tmp/chart-nonempty.$e.txt"
+          done
           rc=0
           # EVERY tag at or above MIN_TAG, not "the last N". An earlier version used `tail -6`,
           # which silently excluded v2.7.6 — the one tag that actually fails this check — so the
@@ -203,17 +212,16 @@ jobs:
             else
               git show "$tag:conf.d/server.conf.tmpl" 2>/dev/null
             fi | grep -o '\${[A-Z_0-9]*}' | tr -d '${}' | sort -u > /tmp/tag-vars.txt || continue
-            missing=$(comm -23 /tmp/tag-vars.txt /tmp/chart-env.txt | tr '\n' ' ')
-            # An upstream the chart renders as "" is as fatal as one it omits entirely.
-            blank=$(grep -E 'PROXY__' /tmp/tag-vars.txt | sort -u \
-                     | comm -23 - /tmp/chart-nonempty.txt | tr '\n' ' ')
-            if [ -n "$missing" ] || [ -n "$blank" ]; then
-              [ -n "$missing" ] && echo "::error::chart does not supply, for image tag $tag: $missing"
-              [ -n "$blank" ] && echo "::error::chart renders an EMPTY upstream, for image tag $tag: $blank"
-              rc=1
-            else
-              echo "  $tag OK"
-            fi
+            bad=0
+            for e in $ENVS; do
+              missing=$(comm -23 /tmp/tag-vars.txt "/tmp/chart-env.$e.txt" | tr '\n' ' ')
+              # An upstream the chart renders as "" is as fatal as one it omits entirely.
+              blank=$(grep -E 'PROXY__' /tmp/tag-vars.txt | sort -u \
+                       | comm -23 - "/tmp/chart-nonempty.$e.txt" | tr '\n' ' ')
+              [ -n "$missing" ] && echo "::error::values-$e.yaml does not supply, for image tag $tag: $missing" && bad=1
+              [ -n "$blank" ] && echo "::error::values-$e.yaml renders an EMPTY upstream, for image tag $tag: $blank" && bad=1
+            done
+            if [ "$bad" = 1 ]; then rc=1; else echo "  $tag OK"; fi
             # WORKING_TREE deliberately does NOT count. It is present on every run, so counting it
             # would make the floor check below unreachable and silently revert it.
             [ "$tag" = WORKING_TREE ] || checked=$((checked + 1))
