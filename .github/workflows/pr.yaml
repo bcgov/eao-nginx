@@ -125,18 +125,24 @@ jobs:
             sleep 1
           done
           rc=0
-          anon=$(curl -s -o /dev/null -w '%{http_code}' http://localhost:18085/)
-          auth=$(curl -s -u ci:ci-secret -o /dev/null -w '%{http_code}' http://localhost:18085/)
-          echo "  anonymous / -> $anon ; authenticated / -> $auth"
-          [ "$anon" = 401 ] || { echo "::error::location / served $anon anonymously; the auth directive is gone"; rc=1; }
-          # 403 means nginx could not read the htpasswd file, so auth is not actually working —
-          # accepting it would let this check pass on broken wiring. 502 is the expected success
-          # here: credentials accepted, upstream deliberately dead.
-          # Exactly 502, nothing looser. ROOT points at a closed port, so a request that reaches the
-          # proxy_pass can only fail to connect — which proves the credential was accepted AND that
-          # the request got past the auth phase. 401/403 mean auth rejected it (403 specifically =
-          # nginx could not read the htpasswd file), and a "not 401" assertion would pass on that.
-          [ "$auth" = 502 ] || { echo "::error::valid credentials got $auth, expected 502 from the dead upstream — auth is not accepting them"; rc=1; }
+          # ALL THREE PATHS, not just `/`. This diff deleted the `location /public` and `location
+          # /lib` blocks, so those two are now gated only by falling through to `location /` — they
+          # are exactly the paths whose gating became implicit, and `/` is the one path that
+          # structurally always carries the directive. Asserting `/` alone would stay green if a
+          # future `location /public` were re-added without ${HTTP_BASIC}, which is the regression
+          # this step exists to catch.
+          for p in / /public /lib; do
+            anon=$(curl -s -o /dev/null -w '%{http_code}' "http://localhost:18085$p")
+            auth=$(curl -s -u ci:ci-secret -o /dev/null -w '%{http_code}' "http://localhost:18085$p")
+            echo "  anonymous $p -> $anon ; authenticated $p -> $auth"
+            [ "$anon" = 401 ] || { echo "::error::$p served $anon anonymously; the auth directive is gone"; rc=1; }
+            # Exactly 502, nothing looser. ROOT points at a closed port, so a request that reaches
+            # the proxy_pass can only fail to connect — which proves the credential was accepted AND
+            # that the request got past the auth phase. 401/403 mean auth rejected it (403
+            # specifically = nginx could not read the htpasswd file), and a "not 401" assertion
+            # would pass on that.
+            [ "$auth" = 502 ] || { echo "::error::$p with valid credentials got $auth, expected 502 from the dead upstream — auth is not accepting them"; rc=1; }
+          done
           docker logs authcheck 2>&1 | tail -5
           docker rm -f authcheck >/dev/null
           exit $rc
