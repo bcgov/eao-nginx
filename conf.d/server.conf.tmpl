@@ -55,25 +55,51 @@ server {
     # its helpful to cache these responses
     proxy_cache globalcache;
 
+    # ── PREPARED FOR AN EXTERNAL HTTPS UPSTREAM ─────────────────────────────────────────────────
+    # NGINX__EPIC__PROXY__ROOT is http://eagle-public:8080 (an in-cluster Service) in every
+    # environment today, so every proxy_ssl_* directive below is INERT — they apply only once the
+    # proxied scheme is https. They live here so repointing ROOT at the Azure Front Door endpoint
+    # is a helm values change alone, with no config edit racing the cutover.
+
+    # SNI. nginx defaults proxy_ssl_server_name off, i.e. it opens https upstreams with no server
+    # name and the peer has to guess which certificate to serve — Front Door answers that with a
+    # *.azureedge.net certificate. It only appears to work today because proxy_ssl_verify is also
+    # off, so nobody checks the name it got back.
+    proxy_ssl_server_name on;
+
+    # NEVER add `proxy_set_header Host $host` here. Measured against the prod Front Door endpoint:
+    #   Host: projects.eao.gov.bc.ca              → 421 Misdirected Request
+    #   Host: <endpoint>.azurefd.net              → 200
+    # Nothing sets Host in this block, so nginx sends its default $proxy_host — the upstream's own
+    # hostname, which is exactly what Front Door routes on. That stays correct until
+    # projects.eao.gov.bc.ca is attached to the endpoint as a custom domain. This is the reflex fix
+    # someone applies mid-incident, and it is a guaranteed outage.
+
+    # Certificate verification: THESE THREE ARE A SET, all or none. Measured on nginx 1.27-alpine,
+    # the image prod runs: `proxy_ssl_verify on` at nginx's default proxy_ssl_verify_depth of 1
+    # returns 502 with `upstream SSL certificate verify error (19: self-signed certificate in
+    # certificate chain)`, because Front Door presents leaf + 2 intermediates + root. Depth 3
+    # returns 200. Deliberately left commented: turning verification on is its own change, to be
+    # made and tested after the upstream is actually https.
+    # proxy_ssl_verify on;
+    # proxy_ssl_trusted_certificate /etc/ssl/certs/ca-certificates.crt;
+    # proxy_ssl_verify_depth 3;
+
+    # DNS IS RESOLVED ONCE, AT CONFIG LOAD. There is no `resolver` anywhere in this file and
+    # proxy_pass holds a literal name, not a variable, so nginx never re-resolves. The Front Door
+    # hostname sits behind Azure Traffic Manager on a 10-second TTL. If that address moves, the
+    # failure mode is the WHOLE SITE 502ing — every page, not one endpoint — while /nginx_status
+    # and the readiness probe both stay green, because rproxy itself is perfectly healthy and
+    # nothing here notices. Recovery is `oc rollout restart deploy/rproxy`.
+    #
+    # Same root, second consequence: the Front Door hostname also publishes an AAAA record that is
+    # UNREACHABLE from this cluster (measured from an rproxy pod — IPv4 returns 200, IPv6 returns
+    # `Network unreachable`). nginx round-robins every address it resolved at startup, so expect
+    # `connect() to [2603:…]:443 failed (101: Network unreachable)` noise in the error log, each
+    # one retried to v4. Noise, not an outage.
+
     # Deploy-time configurable
     ${HTTP_BASIC}
-  }
-
-  location /public {
-    # proxy all traffic to this URL,
-    # note the trailing slash strips out the /proxy path on
-    # the request to the upstream server
-
-    proxy_pass ${NGINX__EPIC__PROXY__PUBLIC};
-
-    # Ensure HTTP get passed thru
-    proxy_pass_request_headers on;
-
-    # its helpful to cache these responses
-    proxy_cache globalcache;
-
-    # Deploy-time configurable
-    ${HTTP_BASIC2}
   }
 
   # Redirect SSD fact sheet
@@ -266,11 +292,10 @@ server {
 #    proxy_cache globalcache;
 #  }
 
-  # Cache the lib directory
-  location /lib {
-    proxy_pass ${NGINX__EPIC__PROXY__ROOT};
-    proxy_cache   globalcache;
-  }
+  # `location /public` and `location /lib` used to sit here, each with its own proxy_pass. Both are
+  # gone: /, /public and /lib all returned a byte-identical Angular shell (md5 0f0e86926b29,
+  # measured on prod), because none of them is distinct content — they fall through to index.html.
+  # They now reach `location /` instead, which is provably the same response from one upstream.
 
   # For status of ngnix service
   location /nginx_status {
