@@ -145,15 +145,16 @@ jobs:
 
       - name: Deploy with Helm
         run: |
+          # httpBasic.public.* is still passed though server.conf.tmpl no longer has a /public
+          # block: released images v2.7.7-v2.7.12 still render one, and without
+          # USERNAME2/PASSWORD2 their entrypoint never writes /tmp/.htpasswd2 — so /public
+          # 403s on any rollback to them.
           helm upgrade --install ${{ env.APP_NAME }} ./helm/${{ env.APP_NAME }} \
             --namespace ${{ env.OPENSHIFT_NAMESPACE_TEST }} \
             --values ./helm/${{ env.APP_NAME }}/values-test.yaml \
             --set image.tag=test \
             --set httpBasic.username=${{ secrets.RPROXY_USERNAME }} \
             --set httpBasic.password=${{ secrets.RPROXY_PASSWORD }} \
-            # Still supplied though server.conf.tmpl no longer has a /public block: released
-            # images v2.7.7-v2.7.12 still do, and without USERNAME2/PASSWORD2 their entrypoint
-            # never writes /tmp/.htpasswd2 — so /public 403s on any rollback to them.
             --set httpBasic.public.username=${{ secrets.RPROXY_USERNAME }} \
             --set httpBasic.public.password=${{ secrets.RPROXY_PASSWORD }} \
             --wait \

@@ -95,8 +95,25 @@ jobs:
         run: |
           set -euo pipefail
           git fetch --tags --quiet --force
+          # A NAME IS NOT ALWAYS ENOUGH. Rendering `- name: X` with `value: ""` protects nothing
+          # where the variable sits INSIDE a directive: envsubst substitutes the empty string, so
+          # `proxy_pass ${X};` becomes `proxy_pass ;` and nginx refuses to start with [emerg].
+          # Where the variable IS the whole directive — ${HTTP_BASIC}, ${HTTP_BASIC1}, ${HTTP_BASIC2}
+          # — empty is legitimate and means "no auth here", which is exactly how prod renders them.
+          # So: every name must be present, and every upstream (NGINX__*PROXY__*) must also be
+          # non-empty.
           helm template rproxy ./helm/rproxy -f helm/rproxy/values-prod.yaml \
-            | grep -oE '^[[:space:]]+- name: [A-Z_0-9]+' | awk '{print $3}' | sort -u > /tmp/chart-env.txt
+            | awk '/^[[:space:]]+- name: [A-Z_0-9]+$/ { n=$3; next }
+                   n != "" {
+                     if ($0 ~ /^[[:space:]]+value:/) {
+                       v=$0; sub(/^[[:space:]]*value:[[:space:]]*/,"",v); gsub(/^"|"$/,"",v)
+                       print n > "/tmp/chart-env.txt"
+                       if (v != "") print n > "/tmp/chart-nonempty.txt"
+                     }
+                     n=""
+                   }'
+          sort -u -o /tmp/chart-env.txt /tmp/chart-env.txt
+          sort -u -o /tmp/chart-nonempty.txt /tmp/chart-nonempty.txt
           rc=0
           # EVERY tag at or above MIN_TAG, not "the last N". An earlier version used `tail -6`,
           # which silently excluded v2.7.6 — the one tag that actually fails this check — so the
@@ -108,19 +125,33 @@ jobs:
           # would proxy at a service that no longer exists, so it is not a deployable target and
           # the chart is not required to satisfy it.
           MIN_TAG=v2.7.7
+          checked=0
           for tag in $(git for-each-ref --format='%(refname:short)' refs/tags \
                         | grep -E '^v[0-9]+\.[0-9]+\.[0-9]+$' | sort -V \
                         | awk -v min="$MIN_TAG" 'min=="" || $0==min {p=1} p'); do
             git show "$tag:conf.d/server.conf.tmpl" 2>/dev/null \
               | grep -o '\${[A-Z_0-9]*}' | tr -d '${}' | sort -u > /tmp/tag-vars.txt || continue
             missing=$(comm -23 /tmp/tag-vars.txt /tmp/chart-env.txt | tr '\n' ' ')
-            if [ -n "$missing" ]; then
-              echo "::error::chart does not supply, for image tag $tag: $missing"
+            # An upstream the chart renders as "" is as fatal as one it omits entirely.
+            blank=$(grep -E 'PROXY__' /tmp/tag-vars.txt | sort -u \
+                     | comm -23 - /tmp/chart-nonempty.txt | tr '\n' ' ')
+            if [ -n "$missing" ] || [ -n "$blank" ]; then
+              [ -n "$missing" ] && echo "::error::chart does not supply, for image tag $tag: $missing"
+              [ -n "$blank" ] && echo "::error::chart renders an EMPTY upstream, for image tag $tag: $blank"
               rc=1
             else
               echo "  $tag OK"
             fi
+            checked=$((checked + 1))
           done
+          # A floor that matches nothing checks nothing, prints nothing and exits 0 — the same
+          # silent pass this guard replaced. If MIN_TAG is ever deleted, retagged or mistyped, say
+          # so loudly instead.
+          if [ "$checked" -eq 0 ]; then
+            echo "::error::no tags at or above MIN_TAG=$MIN_TAG were examined — the guard checked nothing"
+            exit 1
+          fi
+          echo "  checked $checked tag(s) from $MIN_TAG up"
           exit $rc
 
       - name: Validate Helm chart
