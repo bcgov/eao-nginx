@@ -54,6 +54,7 @@ jobs:
               --add-host eagle-public:127.0.0.1 --add-host eagle-api:127.0.0.1 \
               --add-host eagle-admin:127.0.0.1 --add-host penguin-analytics-api:127.0.0.1 \
               --add-host certbot:127.0.0.1 --add-host eagle-search.example.test:127.0.0.1 \
+              --add-host demi-api.example.test:127.0.0.1 \
               -e NGINX__EPIC__SERVER_NAME=example.test \
               -e NGINX__AJAX__SERVER_NAME=ajax.example.test -e NGINX__AJAX__REDIRECT=example.test/x \
               -e NGINX__EPIC__PROXY__ROOT=http://eagle-public:8080 \
@@ -63,6 +64,7 @@ jobs:
               -e NGINX__EPIC__PROXY__ANALYTICS=http://penguin-analytics-api:3000 \
               -e NGINX__EPIC__PROXY__CERTBOT=http://certbot:8080 \
               -e NGINX__EPIC__PROXY__SEARCH="$1" \
+              -e NGINX__EPIC__PROXY__DEMI="$2" \
               -e HTTP_BASIC= -e HTTP_BASIC1= \
               -v "$PWD/conf.d/server.conf.tmpl:/etc/nginx/templates/default.conf.template:ro" \
               -v "$PWD/nginx.conf:/etc/nginx/nginx.conf:ro" \
@@ -72,16 +74,18 @@ jobs:
                 nginx -t'
           }
 
-          # Both shapes an environment can render: an https search upstream, and the
-          # localhost sentinel that stands in where there is no search service.
+          # Both shapes an environment can render: real https upstreams, and the localhost
+          # sentinel that stands in where the service does not exist. SEARCH and DEMI take the
+          # same two shapes and are varied together — only test has both, dev and prod render
+          # the sentinel for at least one of them.
           #
           # The host is pinned to 127.0.0.1 like every other upstream here, and is deliberately
           # not a real one. nginx resolves each proxy_pass host at config load, so naming a live
           # Azure App Service made this step fail the day that estate was torn down (#30) — on
           # every branch, for a reason no PR had introduced. What is under test is that the
           # template renders and parses, not that somebody else's DNS still answers.
-          render_and_test "https://eagle-search.example.test"
-          render_and_test "http://localhost:9999"
+          render_and_test "https://eagle-search.example.test" "https://demi-api.example.test"
+          render_and_test "http://localhost:9999" "http://localhost:9999"
           echo "✓ rendered config passes nginx -t"
 
       # nginx -t proves the config PARSES. It does not prove the auth directive is still in it.
@@ -111,6 +115,7 @@ jobs:
             -e NGINX__EPIC__PROXY__ANALYTICS=http://penguin-analytics-api:3000 \
             -e NGINX__EPIC__PROXY__CERTBOT=http://certbot:8080 \
             -e NGINX__EPIC__PROXY__SEARCH=http://localhost:9999 \
+            -e NGINX__EPIC__PROXY__DEMI=http://localhost:9999 \
             -e HTTP_BASIC='auth_basic "Restricted Content"; auth_basic_user_file /tmp/.htpasswd;' \
             -e HTTP_BASIC1= -e HTTP_BASIC2= \
             -e USERNAME=ci -e PASSWORD=ci-secret \
@@ -131,7 +136,13 @@ jobs:
           # structurally always carries the directive. Asserting `/` alone would stay green if a
           # future `location /public` were re-added without ${HTTP_BASIC}, which is the regression
           # this step exists to catch.
-          for p in / /public /lib; do
+          #
+          # /demi-search/search is here for the same reason and is the newest instance of it: it is
+          # an exact-match location with its own ${HTTP_BASIC}, so nothing structural keeps it gated
+          # — delete that one line and it becomes an anonymous internet-reachable proxy onto
+          # demi-api while every page around it stays behind auth. DEMI points at the same dead
+          # port as ROOT here, so the authenticated 502 assertion below reads identically for it.
+          for p in / /public /lib /demi-search/search; do
             anon=$(curl -s -o /dev/null -w '%{http_code}' "http://localhost:18085$p")
             auth=$(curl -s -u ci:ci-secret -o /dev/null -w '%{http_code}' "http://localhost:18085$p")
             echo "  anonymous $p -> $anon ; authenticated $p -> $auth"
