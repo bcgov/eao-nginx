@@ -17,6 +17,9 @@ nginx:
       certbot: "http://certbot:8080"
       # eagle-search on Azure. Bare host: the /api is added by the proxy_pass in server.conf.tmpl.
       search: "https://eagle-search-api-test.azurewebsites.net"
+      # demi-api on Azure. INTERIM, delete with `location = /demi-search/search` once
+      # demi.eao.gov.bc.ca resolves. Bare host: the /api/search is added by the proxy_pass.
+      demi: "https://demi-api-test.azurewebsites.net"
 
 httpBasic:
   enabled: true

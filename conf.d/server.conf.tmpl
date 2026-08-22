@@ -55,11 +55,15 @@ server {
     # its helpful to cache these responses
     proxy_cache globalcache;
 
-    # ── PREPARED FOR AN EXTERNAL HTTPS UPSTREAM ─────────────────────────────────────────────────
-    # NGINX__EPIC__PROXY__ROOT is http://eagle-public:8080 (an in-cluster Service) in every
-    # environment today, so every proxy_ssl_* directive below is INERT — they apply only once the
-    # proxied scheme is https. They live here so repointing ROOT at the Azure Front Door endpoint
-    # is a helm values change alone, with no config edit racing the cutover.
+    # ── EXTERNAL HTTPS UPSTREAM IN PROD; IN-CLUSTER SERVICE IN DEV AND TEST ─────────────────────
+    # THE CUTOVER ALREADY HAPPENED — do not read this block as forward-looking. Since eao-nginx
+    # v2.7.14, NGINX__EPIC__PROXY__ROOT in helm/rproxy/values-prod.yaml is the Azure Front Door
+    # endpoint, so every proxy_ssl_* directive below is LIVE in production: this is the block that
+    # serves every page of projects.eao.gov.bc.ca, and it serves it over TLS.
+    # values-dev.yaml and values-test.yaml still point at http://eagle-public:8080, an in-cluster
+    # Service, and there these directives are inert — they apply only once the proxied scheme is
+    # https. So "inert" is now a dev/test-only observation. On call in prod, treat everything below
+    # as load-bearing.
 
     # SNI. nginx defaults proxy_ssl_server_name off, i.e. it opens https upstreams with no server
     # name and the peer has to guess which certificate to serve — Front Door answers that with a
@@ -154,10 +158,18 @@ server {
 
   # eagle-search (Azure AI Search) — the search backend for Project, Document and DocumentChunk.
   #
-  # WHY PROXY IT INSTEAD OF LETTING THE BROWSER CALL AZURE. eagle-public's Content-Security-Policy is
-  # `connect-src 'self' https://*.gov.bc.ca` and it is baked into that image, so it cannot vary per
-  # environment and it blocks *.azurewebsites.net outright. Same-origin sidesteps the CSP, needs no
-  # CORS, and keeps the Azure hostname off the page.
+  # WHY PROXY IT INSTEAD OF LETTING THE BROWSER CALL AZURE. eagle-public's Content-Security-Policy
+  # sets `connect-src 'self' https://*.gov.bc.ca`, which blocks *.azurewebsites.net outright.
+  # It now comes from two different places: dev and test get it from the add_header baked into the
+  # eagle-public image (eagle-public/Dockerfile), prod gets it from an Azure Front Door rules-engine
+  # ModifyResponseHeader (eagle-public/azure/main.publicprod.bicep, applied by
+  # azure/modules/front-door.bicep). The two policies are not byte-identical — the Front Door one
+  # adds base-uri — but they carry the SAME connect-src, so the conclusion is unchanged in every
+  # environment: same-origin sidesteps the CSP, needs no CORS, and keeps the Azure hostname off the
+  # page. What changed is only the reason — prod's copy IS now a per-environment value, so
+  # "it is baked into the image and cannot vary" no longer holds there. Widening prod's connect-src
+  # instead of proxying is therefore possible now, and still the wrong trade: it puts the Azure
+  # hostname on the page and moves the call cross-origin.
   #
   # PATH REWRITE. Trailing slashes on both sides, so /eagle-search/search?… reaches the upstream as
   # /api/search?…. eagle-public sends SEARCH_API_PATH=/eagle-search and appends `search?…` itself.
@@ -182,6 +194,68 @@ server {
     proxy_pass ${NGINX__EPIC__PROXY__SEARCH}/api/;
     proxy_ssl_server_name on;
     proxy_pass_request_headers on;
+    proxy_connect_timeout 10s;
+    proxy_send_timeout    60s;
+    proxy_read_timeout    60s;
+  }
+
+  # demi-api search — INTERIM SAME-ORIGIN TRANSPORT, DELETE THIS BLOCK WHEN demi.eao.gov.bc.ca
+  # RESOLVES. A BC Gov DNS request for that name is outstanding. The moment it lands,
+  # SEARCH_API_PATH becomes an absolute https://demi.eao.gov.bc.ca/api URL that the browser can
+  # call directly — it matches `connect-src 'self' https://*.gov.bc.ca` where
+  # demi-api-test.azurewebsites.net does not — and this block has nothing left to do. It buys
+  # exactly one thing: a gov.bc.ca-shaped origin for the one call, while DNS is pending.
+  #
+  # `location =`, AN EXACT MATCH, NOT `^~ /demi-search/`. That is the security control here, not a
+  # micro-optimisation. eagle-public reaches this base from exactly ONE call site —
+  # eagle-public/src/app/services/api.ts:199, `${base}/${queryString}` inside searchKeywords(),
+  # where base is searchPath for the three AZURE_DATASETS — and queryString is always built as
+  # `search?dataset=…` (same file, :164). Nothing else in the app reads searchPath; getItem() and
+  # getFullDataSet() are on apiPath. One URL is the entire requirement.
+  # A prefix match would publish demi-api's WHOLE route table anonymously on a gov.bc.ca origin:
+  # GET /projects and GET /documents both accept pageSize up to 1000 (eagle-demi
+  # src/controllers/nosql/{project,document}.js clamp there), plus /documents/:id/download,
+  # /boundaries and the /api-docs swagger UI. demi-api also mounts its router at BOTH '/api' and
+  # '/' (eagle-demi src/app.js), so no second path segment is protecting anything on its side
+  # either. If a second URL ever has to work, add a second `location =` — do not relax this one.
+  #
+  # Both App Service traps that `location ^~ /eagle-search/` documents above apply here verbatim,
+  # for the same reason (an https upstream that is not a ClusterIP Service): proxy_ssl_server_name
+  # is required because App Service needs SNI and nginx defaults it off, and with no `resolver` in
+  # this file the hostname is resolved ONCE at config load — an App Service IP move 502s this one
+  # location while every other upstream stays green, and the fix is
+  # `oc rollout restart deploy/rproxy`.
+  #
+  # SEARCH_API_PATH is served from eagle-api's Mongo `Config` document, NOT from this chart's
+  # ConfigMap — see the SEARCH_API_PATH note in helm/rproxy/values-prod.yaml before going looking
+  # for a values key to flip.
+  location = /demi-search/search {
+    # Same treatment `/lib` got when its block was deleted, and for the same reason: a location
+    # that carries no ${HTTP_BASIC} is anonymously reachable in dev and test while every page
+    # around it is behind basic auth. eagle-public sends the credentials on this XHR anyway —
+    # it is same-origin, and the user has already authenticated to load the page — so this costs
+    # the app nothing and closes the hole. Prod is unaffected: httpBasic.enabled is false there
+    # and the directive expands to nothing.
+    #
+    # NOT retrofitted to `location ^~ /eagle-search/` above, which has the same gap today. That
+    # one is live and something other than a browser may be calling it; tightening it belongs in
+    # its own change with its own verification, not smuggled into this one.
+    ${HTTP_BASIC}
+    limit_req zone=api_search burst=20 nodelay;
+    proxy_pass ${NGINX__EPIC__PROXY__DEMI}/api/search;
+    proxy_ssl_server_name on;
+    proxy_pass_request_headers on;
+    # STRIP THE BASIC-AUTH CREDENTIAL. ${HTTP_BASIC} above makes the browser attach an
+    # Authorization header to this XHR, and proxy_pass_request_headers would then forward the
+    # shared dev/test credential OUT of the cluster to an Azure App Service. Measured against an
+    # instrumented upstream: every proxied request arrived with `authorization_header=YES`.
+    #
+    # It also fired demi-api's forged-credential path on every legitimate search — /api/search is
+    # mounted on passiveAuthMiddleware, which logs a warning for a credential it rejects, and an
+    # nginx htpasswd string is not a token it can accept. Anonymous is the correct posture for this
+    # route; the basic-auth gate is enforced HERE, before proxy_pass, and stripping the header
+    # afterwards does not weaken it.
+    proxy_set_header Authorization "";
     proxy_connect_timeout 10s;
     proxy_send_timeout    60s;
     proxy_read_timeout    60s;

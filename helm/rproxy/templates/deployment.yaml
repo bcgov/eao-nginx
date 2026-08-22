@@ -108,6 +108,12 @@ spec:
             # instead of a CrashLoopBackOff. Same shape the Typesense upstream used before d7dc62c.
             - name: NGINX__EPIC__PROXY__SEARCH
               value: {{ .Values.nginx.epic.proxy.search | default "http://localhost:9999" | quote }}
+            # demi-api, for the interim `location = /demi-search/search` in server.conf.tmpl.
+            # Same sentinel default and the same reason as SEARCH directly above — see that
+            # comment. Only test sets a real value; dev and prod have no demi-api, so they render
+            # the sentinel and that one location 502s there instead of the pod refusing to start.
+            - name: NGINX__EPIC__PROXY__DEMI
+              value: {{ .Values.nginx.epic.proxy.demi | default "http://localhost:9999" | quote }}
           volumeMounts:
             - name: config
               mountPath: /etc/nginx/config
