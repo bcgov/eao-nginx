@@ -154,6 +154,27 @@ jobs:
             # would pass on that.
             [ "$auth" = 502 ] || { echo "::error::$p with valid credentials got $auth, expected 502 from the dead upstream — auth is not accepting them"; rc=1; }
           done
+          # THE EXACT MATCH IS A SECURITY CONTROL AND NOTHING ABOVE ASSERTS IT. Relaxing
+          # `location = /demi-search/search` to a `^~` prefix leaves every gate in this file green,
+          # while demi-api starts receiving /api/documents?pageSize=1000, /api/projects,
+          # /api/api-docs and /api/boundaries — its whole route table, anonymously, on a gov.bc.ca
+          # origin. Changing the upstream path stays green too, so nothing asserted routing at all.
+          #
+          # Status cannot discriminate: both upstreams are dead, so everything is 502. The
+          # discriminator is WHICH upstream nginx tried, read out of the error log — ROOT is
+          # 127.0.0.1:9 and DEMI is 127.0.0.1:9999, deliberately different ports.
+          for p in /demi-search/documents /demi-search/projects /demi-search/api-docs /demi-search/boundaries /demi-search/ /demi-search/search/; do
+            curl -sg -u ci:ci-secret -o /dev/null "http://localhost:18085$p"
+          done
+          curl -sg -u ci:ci-secret -o /dev/null "http://localhost:18085/demi-search/search?dataset=Project"
+          demi_hits=$(docker logs authcheck 2>&1 | grep -o 'upstream: "http://127.0.0.1:9999[^"]*"' | sort -u)
+          echo "$demi_hits"
+          # Exactly one upstream URI may ever be reached, and it must be /api/search.
+          [ "$(echo "$demi_hits" | grep -c .)" = 1 ] \
+            || { echo "::error::more than one upstream URI reached demi-api — the location is no longer an exact match"; rc=1; }
+          echo "$demi_hits" | grep -q '9999/api/search' \
+            || { echo "::error::demi-api was reached at an unexpected upstream path"; rc=1; }
+
           docker logs authcheck 2>&1 | tail -5
           docker rm -f authcheck >/dev/null
           exit $rc
