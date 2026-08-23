@@ -52,6 +52,17 @@ server {
     # Ensure HTTP get passed thru
     proxy_pass_request_headers on;
 
+    # STRIP THE BASIC-AUTH CREDENTIAL, exactly as `location = /demi-search/search` does. Once this
+    # upstream is Azure Front Door rather than an in-cluster Service, `proxy_pass_request_headers on`
+    # sends the dev/test shared credential — the one ${HTTP_BASIC} just validated — out of the
+    # cluster to Microsoft's edge on EVERY page request, where it lands in their access logs.
+    # Nothing upstream wants it: blob storage behind Front Door is anonymous, and the in-cluster
+    # Service never asked for it either.
+    #
+    # Harmless where basic auth is off (prod: `httpBasic.enabled: false`, so ${HTTP_BASIC} expands
+    # to nothing and there is no header to strip) and correct everywhere else.
+    proxy_set_header Authorization "";
+
     # its helpful to cache these responses
     proxy_cache globalcache;
 
