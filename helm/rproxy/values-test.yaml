@@ -8,7 +8,20 @@ nginx:
   epic:
     serverName: "epic-6cdc9e-test.apps.silver.devops.gov.bc.ca test.projects.eao.gov.bc.ca"
     proxy:
-      root: "http://eagle-public:8080"
+      # AZURE HOSTING, mirroring prod since eao-nginx v2.7.14. The Angular bundle is served from
+      # Storage `$web` behind Front Door; rproxy stays the edge, so `/api`, `/admin/`, `/analytics`,
+      # `/eguide`, `/eagle-search/` and `/demi-search/search` remain its own locations and the app
+      # stays same-origin. Published by eagle-public's `Deploy eagle-public to Azure staging`
+      # workflow, which must run for the SAME TAG as `Deploy to Test` or the two platforms serve
+      # different builds behind one hostname.
+      #
+      # READ THIS HOSTNAME OFF THE DEPLOYMENT, never compose it: Azure assigns both the hash and the
+      # zone (`a02` here, not the documented `z01`), and a wrong zone still resolves — it returns 404
+      # on every page while `/nginx_status` and the readiness probe stay green.
+      #
+      # Rollback is `oc set env deploy/rproxy NGINX__EPIC__PROXY__ROOT=http://eagle-public:8080
+      # -n 6cdc9e-test`, which is why deploy/eagle-public stays running with endpoints.
+      root: "https://eagle-public-test-dbg8ghh8gjd0bscx.a02.azurefd.net"
       api: "http://eagle-api:3000"
       admin: "http://eagle-admin:8080"
       public: "http://eagle-public:8080"

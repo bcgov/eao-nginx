@@ -175,6 +175,43 @@ jobs:
           echo "$demi_hits" | grep -q '9999/api/search' \
             || { echo "::error::demi-api was reached at an unexpected upstream path"; rc=1; }
 
+          # THE CREDENTIAL STRIP, asserted rather than assumed. `location /` sends
+          # `proxy_set_header Authorization ""` so the shared dev/test basic-auth credential does not
+          # leave the cluster to the Front Door upstream. Deleting that line leaves every assertion
+          # above byte-identical — they all read status codes, and the header is invisible to them.
+          #
+          # So this uses a REPORTING upstream instead of a dead port: a one-shot listener that writes
+          # the request it received. `--network host` puts nginx in the runner's netns, so
+          # 127.0.0.1:19099 reaches it.
+          ( printf 'HTTP/1.1 204 No Content\r\nConnection: close\r\n\r\n' | timeout 20 nc -l -p 19099 > /tmp/upstream-req.txt ) &
+          listener=$!
+          docker run -d --name authstrip --network host \
+            -e NGINX__EPIC__SERVER_NAME=localhost \
+            -e NGINX__AJAX__SERVER_NAME=ajax.localhost -e NGINX__AJAX__REDIRECT=localhost/x \
+            -e NGINX__EPIC__PROXY__ROOT=http://127.0.0.1:19099 \
+            -e NGINX__EPIC__PROXY__API=http://127.0.0.1:9 -e NGINX__EPIC__PROXY__ADMIN=http://127.0.0.1:9 \
+            -e NGINX__EPIC__PROXY__EGUIDE=http://127.0.0.1:9 -e NGINX__EPIC__PROXY__ANALYTICS=http://127.0.0.1:9 \
+            -e NGINX__EPIC__PROXY__CERTBOT=http://127.0.0.1:9 \
+            -e NGINX__EPIC__PROXY__SEARCH=http://127.0.0.1:9 -e NGINX__EPIC__PROXY__DEMI=http://127.0.0.1:9999 \
+            -e HTTP_BASIC='auth_basic "Restricted Content"; auth_basic_user_file /tmp/.htpasswd;' \
+            -e HTTP_BASIC1= -e HTTP_BASIC2= \
+            -e USERNAME=ci -e PASSWORD=ci-secret \
+            rproxy:authcheck >/dev/null
+          for i in $(seq 1 20); do
+            [ "$(curl -s -o /dev/null -w '%{http_code}' -u ci:ci-secret http://localhost:8080/ 2>/dev/null)" != "000" ] && break
+            sleep 1
+          done
+          curl -s -o /dev/null -u ci:ci-secret http://localhost:8080/ || true
+          wait $listener 2>/dev/null || true
+          docker rm -f authstrip >/dev/null 2>&1 || true
+
+          # The listener must have seen the request at all, or this proves nothing either way.
+          grep -qi '^GET / HTTP' /tmp/upstream-req.txt \
+            || { echo "::error::the reporting upstream never received the request — this check cannot discriminate, fix it rather than trusting it"; rc=1; }
+          grep -qi '^authorization:' /tmp/upstream-req.txt \
+            && { echo "::error::location / forwarded the Authorization header upstream — the shared basic-auth credential leaves the cluster on every page request. Restore proxy_set_header Authorization \"\"; in that block"; rc=1; }
+          echo "  location / upstream saw $(grep -c . /tmp/upstream-req.txt) header line(s), Authorization absent"
+
           docker logs authcheck 2>&1 | tail -5
           docker rm -f authcheck >/dev/null
           exit $rc

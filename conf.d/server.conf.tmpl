@@ -52,18 +52,30 @@ server {
     # Ensure HTTP get passed thru
     proxy_pass_request_headers on;
 
+    # STRIP THE BASIC-AUTH CREDENTIAL, exactly as `location = /demi-search/search` does. Once this
+    # upstream is Azure Front Door rather than an in-cluster Service, `proxy_pass_request_headers on`
+    # sends the dev/test shared credential — the one ${HTTP_BASIC} just validated — out of the
+    # cluster to Microsoft's edge on EVERY page request, where it lands in their access logs.
+    # Nothing upstream wants it: blob storage behind Front Door is anonymous, and the in-cluster
+    # Service never asked for it either.
+    #
+    # Harmless where basic auth is off (prod: `httpBasic.enabled: false`, so ${HTTP_BASIC} expands
+    # to nothing and there is no header to strip) and correct everywhere else.
+    proxy_set_header Authorization "";
+
     # its helpful to cache these responses
     proxy_cache globalcache;
 
-    # ── EXTERNAL HTTPS UPSTREAM IN PROD; IN-CLUSTER SERVICE IN DEV AND TEST ─────────────────────
+    # ── EXTERNAL HTTPS UPSTREAM IN PROD AND TEST; IN-CLUSTER SERVICE IN DEV ────────────────────
     # THE CUTOVER ALREADY HAPPENED — do not read this block as forward-looking. Since eao-nginx
-    # v2.7.14, NGINX__EPIC__PROXY__ROOT in helm/rproxy/values-prod.yaml is the Azure Front Door
-    # endpoint, so every proxy_ssl_* directive below is LIVE in production: this is the block that
-    # serves every page of projects.eao.gov.bc.ca, and it serves it over TLS.
-    # values-dev.yaml and values-test.yaml still point at http://eagle-public:8080, an in-cluster
-    # Service, and there these directives are inert — they apply only once the proxied scheme is
-    # https. So "inert" is now a dev/test-only observation. On call in prod, treat everything below
-    # as load-bearing.
+    # v2.7.14 `values-prod.yaml`, and now `values-test.yaml`, set NGINX__EPIC__PROXY__ROOT to an
+    # Azure Front Door endpoint, so every proxy_ssl_* directive below is LIVE in both: this is the
+    # block that serves every page of projects.eao.gov.bc.ca and test.projects.eao.gov.bc.ca, and
+    # it serves them over TLS.
+    # Only `values-dev.yaml` still points at http://eagle-public:8080, an in-cluster Service, and
+    # only there are these directives inert — they apply once the proxied scheme is https. So
+    # "inert" is now a DEV-only observation. On call in either other environment, treat everything
+    # below as load-bearing.
 
     # SNI. nginx defaults proxy_ssl_server_name off, i.e. it opens https upstreams with no server
     # name and the peer has to guess which certificate to serve — Front Door answers that with a
