@@ -115,8 +115,14 @@ jobs:
     runs-on: ubuntu-latest
     needs: [validate, tag]
     steps:
+      # PINNED TO THE VERSION TAG, same as prod. Without `ref:` the chart and values came from
+      # master HEAD while the image came from the tag, so redeploying an existing tag was not a
+      # rollback for anything values-level. `release` creates and pushes the tag before this job,
+      # so it always resolves. The trade is prod's: a values-only change on master needs a tag cut.
       - name: Checkout
         uses: actions/checkout@v6
+        with:
+          ref: ${{ inputs.version }}
 
       - name: Install OpenShift CLI
         run: |
