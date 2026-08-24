@@ -115,8 +115,12 @@ jobs:
     runs-on: ubuntu-latest
     needs: [validate, tag]
     steps:
+      # Pinned for the reason deploy-to-prod.yaml gives at its own Checkout step. `release`
+      # pushes the tag before this job, so it always resolves.
       - name: Checkout
         uses: actions/checkout@v6
+        with:
+          ref: ${{ inputs.version }}
 
       - name: Install OpenShift CLI
         run: |
