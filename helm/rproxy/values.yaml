@@ -38,9 +38,9 @@ nginx:
       eguide: "http://eagle-api:3000"
       analytics: "http://penguin-analytics-api:3000"
       certbot: "http://certbot:8080"
-      # eagle-search, per environment. Empty here on purpose: only test has a search service (dev's
-      # was torn down 2026-08-11), and the deployment substitutes an unreachable sentinel so nginx
-      # still starts everywhere else.
+      # eagle-search, per environment. Empty here on purpose: only prod still has a search service
+      # (dev torn down 2026-08-11, test retired 2026-08-25), and the deployment substitutes an
+      # unreachable sentinel so nginx still starts everywhere else.
       search: ""
     # proxyDeployConfig removed — timeouts are now hardcoded in server.conf.tmpl
 
