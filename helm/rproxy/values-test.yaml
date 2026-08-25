@@ -28,8 +28,9 @@ nginx:
       eguide: "http://eagle-api:3000"
       analytics: "http://penguin-analytics-api:3000"
       certbot: "http://certbot:8080"
-      # eagle-search on Azure. Bare host: the /api is added by the proxy_pass in server.conf.tmpl.
-      search: "https://eagle-search-api-test.azurewebsites.net"
+      # eagle-search-api-test retired 2026-08-25; sentinel keeps the shared /eagle-search/ block
+      # renderable. Prod still points at eagle-search-api-prod (values-prod.yaml).
+      search: "http://localhost:9999"
       # demi-api on Azure. INTERIM, delete with `location = /demi-search/search` once
       # demi.eao.gov.bc.ca resolves. Bare host: the /api/search is added by the proxy_pass.
       demi: "https://demi-api-test.azurewebsites.net"
