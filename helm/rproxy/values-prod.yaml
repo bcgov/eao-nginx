@@ -37,12 +37,6 @@ nginx:
       #
       # As of this commit 5971894 is in NO released tag — master is v2.7.12 plus 5971894 — so a tag
       # has to be cut and deployed before this value is safe to render.
-      #
-      # THE HAZARD OUTLIVES THE CUTOVER, UNTIL THE CHART IS PINNED. `Deploy to Prod` renders this
-      # chart from the DEFAULT BRANCH while --set image.tag selects the image independently, so once
-      # this value is on master EVERY deploy of an older tag — including a rollback to v2.7.12 —
-      # pairs it with an image whose /public and /lib still point at the pod. Land the checkout
-      # pinning first, or accept that /public and /lib are broken on every rollback target.
       root: "https://eagle-public-prod-aafug4ahavgzbvh9.a01.azurefd.net"
       api: "http://eagle-api:3000"
       admin: "http://eagle-admin:8080"
@@ -56,6 +50,12 @@ nginx:
       # composed by hand. Without it templates/deployment.yaml renders the http://localhost:9999
       # sentinel and `location ^~ /eagle-search/` 502s.
       search: "https://eagle-search-api-prod.azurewebsites.net"
+      # demi-api on Azure. INTERIM, delete with `location = /demi-search/search` once
+      # demi.eao.gov.bc.ca resolves. Bare host: the /api/search is added by the proxy_pass.
+      # demi-api-prod does not exist yet. Naming it here (rather than leaving the key absent, which
+      # would render deployment.yaml's localhost:9999 sentinel) still 502s `/demi-search/search`
+      # today — the hostname has no app behind it — same safe-by-default outcome the sentinel gives.
+      demi: "https://demi-api-prod.azurewebsites.net"
 
 httpBasic:
   # Main endpoint auth disabled in production
