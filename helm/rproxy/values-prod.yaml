@@ -44,10 +44,8 @@ nginx:
       eguide: "http://eagle-api:3000"
       analytics: "http://penguin-analytics-api:3000"  # Production does not have analytics configured
       certbot: "http://certbot:8080"
-      # Upstream for `location ^~ /eagle-search/` in server.conf.tmpl. Whether eagle-public calls
-      # this path is a separate switch: the Mongo `Config.SEARCH_API_PATH` field, served via
-      # /api/config. Flip/rollback recipe: eagle-dev-guides wiki page `Eagle-Search`.
-      search: "https://eagle-search-api-prod.azurewebsites.net"
+      # /eagle-search/ upstream retired 2026-08-26 (eagle-search deleted; search is /demi-search →
+      # demi:). Key absent renders the http://localhost:9999 sentinel, so the location 502s harmlessly.
       # demi-api on Azure. INTERIM, delete with `location = /demi-search/search` once
       # demi.eao.gov.bc.ca resolves. Bare host: the /api/search is added by the proxy_pass.
       demi: "https://demi-api-prod.azurewebsites.net"
