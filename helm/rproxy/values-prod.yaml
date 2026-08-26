@@ -44,11 +44,9 @@ nginx:
       eguide: "http://eagle-api:3000"
       analytics: "http://penguin-analytics-api:3000"  # Production does not have analytics configured
       certbot: "http://certbot:8080"
-      # eagle-search on Azure. Bare host — the /api is added by the proxy_pass in
-      # server.conf.tmpl, exactly as in values-test.yaml. Host is the `searchApiHostName` output of
-      # the prod search estate deployed 2026-08-18 (eagle-search azure/main.searchprod.bicep), never
-      # composed by hand. Without it templates/deployment.yaml renders the http://localhost:9999
-      # sentinel and `location ^~ /eagle-search/` 502s.
+      # Upstream for `location ^~ /eagle-search/` in server.conf.tmpl. Whether eagle-public calls
+      # this path is a separate switch: the Mongo `Config.SEARCH_API_PATH` field, served via
+      # /api/config. Flip/rollback recipe: eagle-dev-guides wiki page `Eagle-Search`.
       search: "https://eagle-search-api-prod.azurewebsites.net"
       # demi-api on Azure. INTERIM, delete with `location = /demi-search/search` once
       # demi.eao.gov.bc.ca resolves. Bare host: the /api/search is added by the proxy_pass.
@@ -123,36 +121,10 @@ config:
   # returns: API_LOCATION, KEYCLOAK_CLIENT_ID, TYPESENSE_ENABLED and ENGAGE_API_URL. eagle-api adds
   # SEARCH_API_PATH. 18 - 4 + 1 = 15.
   #
-  # Do not read that four-key list as a description of THIS chart: TYPESENSE_ENABLED left
-  # configmap.yaml in v2.7.11 (81843b3, "drop the typesense proxy and config"), so the ConfigMap
-  # rendered here carries 18 keys including SEARCH_API_PATH and NOT TYPESENSE_ENABLED. Grep this
-  # chart for the four and you will find three.
-  #
-  # None of the four is load-bearing — API_LOCATION is dev-proxy only, TYPESENSE_ENABLED is retired,
-  # ENGAGE_API_URL is unused, and eagle-admin preserves KEYCLOAK_CLIENT_ID from its own env.js — and
-  # prod has run without them since 2026-08-20 with no breakage. So every key in this block is now
-  # rendered, mounted and read by nobody.
-  #
-  # The flip and its rollback are one Mongo field, no rollout either way:
-  #   db.epic.updateOne({ _schemaName: 'Config' }, { $set: { SEARCH_API_PATH: '/eagle-search' } })
-  #   db.epic.updateOne({ _schemaName: 'Config' }, { $set: { SEARCH_API_PATH: '' } })
-  # Empty is the documented kill switch: eagle-api/Mongo serves Project and Document search again.
-  #
-  # BUT THE KILL SWITCH IS NOT THE ONLY GATE, and the `search:` value above is the reason. That
-  # field governs whether eagle-public CALLS /eagle-search/; it does not govern whether the path is
-  # OPEN. The moment this renders, `projects.eao.gov.bc.ca/eagle-search/search?dataset=Document`
-  # answers anonymously off the prod index, kill switch empty or not. That is a new public surface
-  # on production, so the order is:
-  #
-  #   1. digitalspace/eagle-search#17 merged and deployed to eagle-search-api-prod — it closes two
-  #      ACL defects and adds the leak suite.
-  #   2. Full reindex of the prod index, counts checked.
-  #   3. `node scripts/check-acl.js --diff` against prod, green.
-  #   4. This values change, then the Mongo flip.
-  #
-  # Steps 2 and 4 were already here; 1 and 3 are the ones that matter because THIS file is what
-  # makes the path reachable. The exposure is small today only because the prod chunk index is empty
-  # — and the reindex in step 2 is exactly what fills it.
+  # None of them is load-bearing — TYPESENSE_ENABLED is dead, API_LOCATION is dev-proxy only, ENGAGE_API_URL is unused,
+  # and eagle-admin preserves KEYCLOAK_CLIENT_ID from its own env.js — and prod has run without
+  # them since 2026-08-20 with no breakage. So every key in this block is now rendered, mounted
+  # and read by nobody.
   adminPath: "/admin/"
   keycloak:
     clientId: "eagle-api-console"
