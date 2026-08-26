@@ -52,10 +52,10 @@ nginx:
       search: "https://eagle-search-api-prod.azurewebsites.net"
       # demi-api on Azure. INTERIM, delete with `location = /demi-search/search` once
       # demi.eao.gov.bc.ca resolves. Bare host: the /api/search is added by the proxy_pass.
-      # demi-api-prod does not exist yet. Naming it here (rather than leaving the key absent, which
-      # would render deployment.yaml's localhost:9999 sentinel) still 502s `/demi-search/search`
-      # today — the hostname has no app behind it — same safe-by-default outcome the sentinel gives.
-      demi: "https://demi-api-prod.azurewebsites.net"
+      # DO NOT set this until demi-api-prod resolves in DNS: nginx refuses to start on an
+      # unresolvable proxy_pass host (CrashLoopBackOff), unlike the localhost:9999 sentinel the
+      # absent key renders. Set to "https://demi-api-prod.azurewebsites.net" after eagle-demi
+      # TODO 4.1 creates the app.
 
 httpBasic:
   # Main endpoint auth disabled in production
