@@ -46,7 +46,7 @@ nginx:
       certbot: "http://certbot:8080"
       # Upstream for `location ^~ /eagle-search/` in server.conf.tmpl. Whether eagle-public calls
       # this path is a separate switch: the Mongo `Config.SEARCH_API_PATH` field, served via
-      # /api/config. Flip/rollback recipe: eagle-dev-guides wiki page `Search-Cutover`.
+      # /api/config. Flip/rollback recipe: eagle-dev-guides wiki page `Eagle-Search`.
       search: "https://eagle-search-api-prod.azurewebsites.net"
       # demi-api on Azure. INTERIM, delete with `location = /demi-search/search` once
       # demi.eao.gov.bc.ca resolves. Bare host: the /api/search is added by the proxy_pass.
@@ -121,7 +121,7 @@ config:
   # returns: API_LOCATION, KEYCLOAK_CLIENT_ID, TYPESENSE_ENABLED and ENGAGE_API_URL. eagle-api adds
   # SEARCH_API_PATH. 18 - 4 + 1 = 15.
   #
-  # None of the four is load-bearing — API_LOCATION is dev-proxy only, ENGAGE_API_URL is unused,
+  # None of them is load-bearing — TYPESENSE_ENABLED is dead, API_LOCATION is dev-proxy only, ENGAGE_API_URL is unused,
   # and eagle-admin preserves KEYCLOAK_CLIENT_ID from its own env.js — and prod has run without
   # them since 2026-08-20 with no breakage. So every key in this block is now rendered, mounted
   # and read by nobody.
