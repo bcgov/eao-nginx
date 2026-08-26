@@ -44,8 +44,9 @@ nginx:
       eguide: "http://eagle-api:3000"
       analytics: "http://penguin-analytics-api:3000"  # Production does not have analytics configured
       certbot: "http://certbot:8080"
-      # /eagle-search/ upstream retired 2026-08-26 (eagle-search deleted; search is /demi-search →
-      # demi:). Key absent renders the http://localhost:9999 sentinel, so the location 502s harmlessly.
+      # /eagle-search/ upstream removed 2026-08-26 ahead of deleting eagle-search-api-prod; search is
+      # /demi-search (demi:). Rollback for search is the Mongo kill switch (SEARCH_API_PATH '' →
+      # eagle-api serves it). Key absent renders the localhost:9999 sentinel; the location 502s.
       # demi-api on Azure. INTERIM, delete with `location = /demi-search/search` once
       # demi.eao.gov.bc.ca resolves. Bare host: the /api/search is added by the proxy_pass.
       demi: "https://demi-api-prod.azurewebsites.net"
