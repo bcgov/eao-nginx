@@ -53,7 +53,7 @@ spec:
           env:
             # HTTP Basic Auth configuration
             - name: HTTP_BASIC
-              value: {{ .Values.httpBasic.directive | quote }}
+              value: {{ ternary .Values.httpBasic.directive "" .Values.httpBasic.enabled | quote }}
             - name: USERNAME
               value: {{ .Values.httpBasic.username | quote }}
             - name: PASSWORD
