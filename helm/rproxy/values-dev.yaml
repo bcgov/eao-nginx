@@ -8,7 +8,8 @@ nginx:
   epic:
     serverName: "eagle-dev.apps.silver.devops.gov.bc.ca"
     proxy:
-      root: "http://eagle-public:8080"
+      # No dev Front Door; dev serves the test static site. The eagle-public Service is gone from 6cdc9e-dev.
+      root: "https://eagle-public-test-dbg8ghh8gjd0bscx.a02.azurefd.net"
       api: "http://eagle-api:3000"
       admin: "http://eagle-admin:8080"
       public: "http://eagle-public:8080"
