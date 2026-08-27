@@ -35,7 +35,7 @@ nginx:
       demi: "https://demi-api-test.azurewebsites.net"
 
 httpBasic:
-  enabled: true
+  enabled: false  # replaced by the ACCESS_GATE curtain in eagle-public and eagle-admin
   directive: "auth_basic \"Restricted Content\"; auth_basic_user_file /tmp/.htpasswd;"
   # Credentials injected via GitHub secrets - do NOT hardcode
   username: ""
