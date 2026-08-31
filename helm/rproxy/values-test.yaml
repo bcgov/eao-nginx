@@ -32,7 +32,7 @@ nginx:
       # via /demi-search. The deployment renders the sentinel, as in dev.
       # demi-api on Azure. INTERIM, delete with `location = /demi-search/search` once
       # demi.eao.gov.bc.ca resolves. Bare host: the /api/search is added by the proxy_pass.
-      demi: "https://demi-api-test.azurewebsites.net"
+      demi: "https://demi-api-fc-test.azurewebsites.net"
 
 httpBasic:
   enabled: false  # replaced by the ACCESS_GATE curtain in eagle-public and eagle-admin
