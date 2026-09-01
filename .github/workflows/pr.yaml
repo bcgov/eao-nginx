@@ -177,7 +177,9 @@ jobs:
           # Short links ride the same upstream. /s/<code> must reach demi-api as /api/s/<code>, the
           # /s/ segment kept: dropping it maps /s/projects onto demi-api's real /projects route.
           curl -sg -u ci:ci-secret -o /dev/null "http://localhost:18085/s/projects"
-          docker logs authcheck 2>&1 | grep -q 'upstream: "http://127.0.0.1:9999/api/s/projects"' \
+          # Host, not port: after the first 502 nginx marks the server down and logs later hits as
+          # "no live upstreams" with the unresolved host name instead of 127.0.0.1:9999.
+          docker logs authcheck 2>&1 | grep -q 'request: "GET /s/projects [^"]*", upstream: "http://[^"]*/api/s/projects"' \
             || { echo "::error::/s/projects did not reach demi-api as /api/s/projects — the /s/ prefix is being stripped"; rc=1; }
 
           # THE CREDENTIAL STRIP, asserted rather than assumed. `location /` sends
