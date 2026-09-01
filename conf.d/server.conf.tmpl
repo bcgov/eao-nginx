@@ -277,10 +277,10 @@ server {
   location ^~ /s/ {
     ${HTTP_BASIC}
     limit_req zone=api_general burst=10 nodelay;
-    # NO URI on proxy_pass: the /s/ prefix must arrive at demi-api intact. Adding one strips it
-    # and maps /s/projects onto demi-api's /projects, publishing its whole route table anonymously
-    # on a gov.bc.ca origin — the hazard spelled out at `location = /demi-search/search`.
-    proxy_pass ${NGINX__EPIC__PROXY__DEMI};
+    # The URI keeps the /s/ prefix (rewritten to /api/s/, where APIM mounts demi-api). Never a bare
+    # host or /api/: that maps /s/projects onto demi-api's /projects, publishing its whole route
+    # table anonymously on a gov.bc.ca origin — the hazard spelled out at `location = /demi-search/search`.
+    proxy_pass ${NGINX__EPIC__PROXY__DEMI}/api/s/;
     proxy_ssl_server_name on;
     proxy_pass_request_headers on;
     proxy_set_header Authorization "";
