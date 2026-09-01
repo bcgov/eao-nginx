@@ -17,10 +17,13 @@ spec:
       {{- include "rproxy.selectorLabels" . | nindent 6 }}
   template:
     metadata:
-      {{- with .Values.podAnnotations }}
       annotations:
+        # Roll the pods when a credential is rotated; the env comes from a Secret, and a Secret
+        # change on its own does not restart anything.
+        checksum/basic-auth: {{ include (print $.Template.BasePath "/secret.yaml") . | sha256sum }}
+        {{- with .Values.podAnnotations }}
         {{- toYaml . | nindent 8 }}
-      {{- end }}
+        {{- end }}
       labels:
         {{- include "rproxy.selectorLabels" . | nindent 8 }}
         role: {{ .Values.podLabels.role | default "rproxy-eagle-epic" }}
@@ -51,19 +54,32 @@ spec:
           resources:
             {{- toYaml .Values.resources | nindent 12 }}
           env:
-            # HTTP Basic Auth configuration
+            # HTTP Basic Auth configuration. The directives are plain values; the credentials come
+            # from the rproxy-basic-auth Secret so `get deploy` does not expose them.
             - name: HTTP_BASIC
               value: {{ ternary .Values.httpBasic.directive "" .Values.httpBasic.enabled | quote }}
             - name: USERNAME
-              value: {{ .Values.httpBasic.username | quote }}
+              valueFrom:
+                secretKeyRef:
+                  name: rproxy-basic-auth
+                  key: username
             - name: PASSWORD
-              value: {{ .Values.httpBasic.password | quote }}
+              valueFrom:
+                secretKeyRef:
+                  name: rproxy-basic-auth
+                  key: password
             - name: HTTP_BASIC1
               value: {{ .Values.httpBasic.eguide.directive | quote }}
             - name: USERNAME1
-              value: {{ .Values.httpBasic.eguide.username | quote }}
+              valueFrom:
+                secretKeyRef:
+                  name: rproxy-basic-auth
+                  key: eguide-username
             - name: PASSWORD1
-              value: {{ .Values.httpBasic.eguide.password | quote }}
+              valueFrom:
+                secretKeyRef:
+                  name: rproxy-basic-auth
+                  key: eguide-password
             # KEPT DELIBERATELY THOUGH server.conf.tmpl NO LONGER REFERENCES THEM. The chart is
             # rendered from the DEFAULT BRANCH at deploy time (deploy-to-prod.yaml checks out with
             # no `ref:`) while `--set image.tag` selects an older image. Every released tag
@@ -76,9 +92,15 @@ spec:
             - name: HTTP_BASIC2
               value: {{ .Values.httpBasic.public.directive | quote }}
             - name: USERNAME2
-              value: {{ .Values.httpBasic.public.username | quote }}
+              valueFrom:
+                secretKeyRef:
+                  name: rproxy-basic-auth
+                  key: public-username
             - name: PASSWORD2
-              value: {{ .Values.httpBasic.public.password | quote }}
+              valueFrom:
+                secretKeyRef:
+                  name: rproxy-basic-auth
+                  key: public-password
             # Ajax redirect configuration
             - name: NGINX__AJAX__SERVER_NAME
               value: {{ .Values.nginx.ajax.serverName | quote }}
