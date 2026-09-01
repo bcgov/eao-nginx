@@ -49,7 +49,7 @@ nginx:
       # eagle-api serves it). Key absent renders the localhost:9999 sentinel; the location 502s.
       # demi-api on Azure. INTERIM, delete with `location = /demi-search/search` once
       # demi.eao.gov.bc.ca resolves. Bare host: the /api/search is added by the proxy_pass.
-      demi: "https://demi-api-prod.azurewebsites.net"
+      demi: "https://demi-apim-prod.azure-api.net"
 
 httpBasic:
   # Main endpoint auth disabled in production
