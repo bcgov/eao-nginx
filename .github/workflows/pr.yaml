@@ -174,6 +174,11 @@ jobs:
             || { echo "::error::more than one upstream URI reached demi-api — the location is no longer an exact match"; rc=1; }
           echo "$demi_hits" | grep -q '9999/api/search' \
             || { echo "::error::demi-api was reached at an unexpected upstream path"; rc=1; }
+          # Short links ride the same upstream. /s/<code> must reach demi-api as /api/s/<code>, the
+          # /s/ segment kept: dropping it maps /s/projects onto demi-api's real /projects route.
+          curl -sg -u ci:ci-secret -o /dev/null "http://localhost:18085/s/projects"
+          docker logs authcheck 2>&1 | grep -q 'upstream: "http://127.0.0.1:9999/api/s/projects"' \
+            || { echo "::error::/s/projects did not reach demi-api as /api/s/projects — the /s/ prefix is being stripped"; rc=1; }
 
           # THE CREDENTIAL STRIP, asserted rather than assumed. `location /` sends
           # `proxy_set_header Authorization ""` so the shared dev/test basic-auth credential does not
