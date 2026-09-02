@@ -219,6 +219,12 @@ jobs:
             && { echo "::error::location / forwarded the Authorization header upstream — the shared basic-auth credential leaves the cluster on every page request. Restore proxy_set_header Authorization \"\"; in that block"; rc=1; }
           echo "  location / upstream saw $(grep -c . /tmp/upstream-req.txt) header line(s), Authorization absent"
 
+          # Worker cap: `auto` means one worker per node core (32 on silver), the OOM kills behind the
+          # 2026-09-02 test 502s, and nginx -t and helm lint both stay green if it comes back.
+          workers=$(docker exec authcheck ps -o args | grep -c 'nginx: worker process' || true)
+          [ "$workers" = 2 ] || { echo "::error::nginx.conf must keep worker_processes 2, saw $workers workers"; rc=1; }
+          echo "  nginx workers: $workers"
+
           docker logs authcheck 2>&1 | tail -5
           docker rm -f authcheck >/dev/null
           exit $rc
