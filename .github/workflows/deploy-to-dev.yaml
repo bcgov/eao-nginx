@@ -4,9 +4,6 @@ on:
   push:
     branches:
       - master
-    paths-ignore:
-      - "helm/rproxy/README.md"
-      - "README.md"
   workflow_dispatch:
 
 permissions: write-all
