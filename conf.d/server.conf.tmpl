@@ -275,8 +275,8 @@ server {
 
   # DEMI bulk-download job API: POST creates a job, GET /<id> polls it. `^~` matches the sibling
   # /s/ and /eagle-search/ blocks and keeps a future regex location from stealing the path.
-  # X-Forwarded-For passes through as the router set it (client first); demi trusts this proxy
-  # and reads the rightmost address that is not a proxy, so nothing is appended here.
+  # X-Forwarded-For passes through as the router set it. Appending here would add the router
+  # hop, not the browser; which hop to trust is demi's decision (TRUSTED_PROXY_IPS there).
   location ^~ /demi-search/bulk-downloads {
     ${HTTP_BASIC}
     limit_req zone=api_search burst=20 nodelay;

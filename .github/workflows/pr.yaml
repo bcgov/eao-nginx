@@ -142,7 +142,7 @@ jobs:
           # — delete that one line and it becomes an anonymous internet-reachable proxy onto
           # demi-api while every page around it stays behind auth. DEMI points at the same dead
           # port as ROOT here, so the authenticated 502 assertion below reads identically for it.
-          for p in / /public /lib /demi-search/search; do
+          for p in / /public /lib /demi-search/search /demi-search/bulk-downloads /demi-search/bulk-downloads/z; do
             anon=$(curl -s -o /dev/null -w '%{http_code}' "http://localhost:18085$p")
             auth=$(curl -s -u ci:ci-secret -o /dev/null -w '%{http_code}' "http://localhost:18085$p")
             echo "  anonymous $p -> $anon ; authenticated $p -> $auth"
@@ -169,11 +169,16 @@ jobs:
           curl -sg -u ci:ci-secret -o /dev/null "http://localhost:18085/demi-search/search?dataset=Project"
           demi_hits=$(docker logs authcheck 2>&1 | grep -o 'upstream: "http://127.0.0.1:9999[^"]*"' | sort -u)
           echo "$demi_hits"
-          # Exactly one upstream URI may ever be reached, and it must be /api/search.
-          [ "$(echo "$demi_hits" | grep -c .)" = 1 ] \
-            || { echo "::error::more than one upstream URI reached demi-api — the location is no longer an exact match"; rc=1; }
-          echo "$demi_hits" | grep -q '9999/api/search' \
-            || { echo "::error::demi-api was reached at an unexpected upstream path"; rc=1; }
+          # Exactly three upstream URIs may ever be reached: /api/search from the exact-match
+          # search location, and /api/bulk-downloads plus /api/bulk-downloads/z from the
+          # bulk-downloads prefix location (probed by the auth loop above). Anything else means a
+          # location widened and demi-api's route table is reachable anonymously.
+          [ "$(echo "$demi_hits" | grep -c .)" = 3 ] \
+            || { echo "::error::unexpected set of upstream URIs reached demi-api — a location is wider than intended"; rc=1; }
+          for u in '9999/api/search' '9999/api/bulk-downloads"' '9999/api/bulk-downloads/z"'; do
+            echo "$demi_hits" | grep -q "$u" \
+              || { echo "::error::demi-api was not reached at the expected upstream path $u"; rc=1; }
+          done
           # Short links ride the same upstream. /s/<code> must reach demi-api as /api/s/<code>, the
           # /s/ segment kept: dropping it maps /s/projects onto demi-api's real /projects route.
           curl -sg -u ci:ci-secret -o /dev/null "http://localhost:18085/s/projects"
