@@ -77,6 +77,15 @@ jobs:
     runs-on: ubuntu-latest
     needs: [validate, release]
     steps:
+      - name: Checkout
+        uses: actions/checkout@v6
+        with:
+          ref: ${{ needs.validate.outputs.version }}
+
+      - name: Get short SHA
+        id: short-sha
+        run: echo "SHA=$(git rev-parse --short HEAD)" >> $GITHUB_OUTPUT
+
       - name: Install OpenShift CLI
         run: |
           curl -LO "https://mirror.openshift.com/pub/openshift-v4/clients/ocp/latest/openshift-client-linux.tar.gz"
@@ -99,12 +108,17 @@ jobs:
 
       - name: Tag Image
         run: |
-          # Check if version tag exists, create from ci-latest if not
+          # Check if version tag exists, create from the dev build's short-sha tag if not.
+          # ci-latest is whatever Deploy to Dev pushed most recently, which may not be this commit.
           if oc -n ${{ env.OPENSHIFT_NAMESPACE_TOOLS }} get imagestreamtag ${{ env.IMAGE_NAME }}:${{ needs.validate.outputs.version }} &>/dev/null; then
             echo "Image tag ${{ needs.validate.outputs.version }} already exists - using existing image"
           else
-            echo "Image tag ${{ needs.validate.outputs.version }} does not exist - tagging from ci-latest"
-            oc tag ${{ env.IMAGE_NAME }}:ci-latest ${{ env.IMAGE_NAME }}:${{ needs.validate.outputs.version }} -n ${{ env.OPENSHIFT_NAMESPACE_TOOLS }}
+            if ! oc -n ${{ env.OPENSHIFT_NAMESPACE_TOOLS }} get imagestreamtag ${{ env.IMAGE_NAME }}:${{ steps.short-sha.outputs.SHA }} &>/dev/null; then
+              echo "Image for ${{ needs.validate.outputs.version }} (${{ env.IMAGE_NAME }}:${{ steps.short-sha.outputs.SHA }}) not built yet — wait for the Deploy to Dev run of that commit, then re-run"
+              exit 1
+            fi
+            echo "Image tag ${{ needs.validate.outputs.version }} does not exist - tagging from ${{ env.IMAGE_NAME }}:${{ steps.short-sha.outputs.SHA }}"
+            oc tag ${{ env.IMAGE_NAME }}:${{ steps.short-sha.outputs.SHA }} ${{ env.IMAGE_NAME }}:${{ needs.validate.outputs.version }} -n ${{ env.OPENSHIFT_NAMESPACE_TOOLS }}
           fi
           
           # Tag version as test
