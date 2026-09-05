@@ -37,7 +37,16 @@ jobs:
               exit 1
             fi
           done
-          
+
+          # THE CREDENTIAL STRIP ON /demi-projects, ASSERTED FROM THE TEMPLATE ITSELF.
+          # `proxy_set_header Authorization "";` is literal, not a ${VAR} envsubst expands, so the
+          # raw template already shows what ships — no render needed. Extract only the
+          # /demi-projects location block, open to its own closing brace, so a strip that exists
+          # elsewhere in the file cannot hide its absence here.
+          demi_projects_block=$(awk '/^  location ~ "\^\/demi-projects/{f=1} f{print} f && /^  \}/{exit}' conf.d/server.conf.tmpl)
+          echo "$demi_projects_block" | grep -qF 'proxy_set_header Authorization "";' \
+            || { echo "Error: /demi-projects location block is missing proxy_set_header Authorization \"\";"; exit 1; }
+
           echo "✓ nginx config template validation passed"
 
       # The grep above cannot tell a valid config from one that will not start. envsubst turns an
