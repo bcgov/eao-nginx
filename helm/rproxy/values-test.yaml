@@ -10,7 +10,7 @@ nginx:
     proxy:
       # AZURE HOSTING, mirroring prod since eao-nginx v2.7.14. The Angular bundle is served from
       # Storage `$web` behind Front Door; rproxy stays the edge, so `/api`, `/admin/`, `/analytics`,
-      # `/eguide` and `/demi-search/search` remain its own locations and the app
+      # `/eguide`, `/demi-search` and `/demi-projects` remain its own locations and the app
       # stays same-origin. Published by eagle-public's `Deploy eagle-public to Azure staging`
       # workflow, which must run for the SAME TAG as `Deploy to Test` or the two platforms serve
       # different builds behind one hostname.
@@ -31,7 +31,7 @@ nginx:
       # No eagle-search route: eagle-search-api-test retired 2026-08-25; test search is demi-api
       # via /demi-search. The deployment renders the sentinel, as in dev.
       # demi-api on Azure. INTERIM, delete with `location = /demi-search/search` once
-      # demi.eao.gov.bc.ca resolves. Bare host: the /api/search is added by the proxy_pass.
+      # demi.eao.gov.bc.ca resolves. Bare host: each location adds its own /api/... path.
       demi: "https://demi-apim-test.azure-api.net"
 
 httpBasic:

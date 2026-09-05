@@ -305,6 +305,28 @@ server {
     proxy_read_timeout    30s;
   }
 
+  # Project phases for eagle-public's assessment rail: ONE demi-api document per Eagle id. The regex
+  # admits exactly /demi-projects/<ObjectId>, so demi-api's list route, /documents, its downloads and
+  # its swagger stay unpublished — the hazard spelled out at `location = /demi-search/search`.
+  #
+  # rewrite + a variable-free proxy_pass, the same shape as the /api/v2/projects block below: the id
+  # goes into the URI, never into the upstream, so demi-api resolves once at config load like every
+  # other upstream here. Both regexes are QUOTED — nginx reads an unquoted `{` as the start of a
+  # block, so a bare `{24}` fails config parse with `unknown directive "24}$"`.
+  location ~ "^/demi-projects/[0-9a-f]{24}$" {
+    ${HTTP_BASIC}
+    limit_req zone=api_general burst=10 nodelay;
+    limit_except GET { deny all; }
+    rewrite "^/demi-projects/([0-9a-f]{24})$" /api/projects/$1 break;
+    proxy_pass ${NGINX__EPIC__PROXY__DEMI};
+    proxy_ssl_server_name on;
+    proxy_pass_request_headers on;
+    proxy_set_header Authorization "";
+    proxy_connect_timeout 10s;
+    proxy_send_timeout    30s;
+    proxy_read_timeout    30s;
+  }
+
   # Legacy v2 projects routing rewrite to current /api/public/project
   location ~ ^/api/v2/projects/(.+)$ {
     rewrite ^/api/v2/projects/(.+)$ /api/public/project/$1 break;
