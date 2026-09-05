@@ -47,6 +47,13 @@ jobs:
           echo "$demi_projects_block" | grep -qF 'proxy_set_header Authorization "";' \
             || { echo "Error: /demi-projects location block is missing proxy_set_header Authorization \"\";"; exit 1; }
 
+          # THE 404 TERMINATOR. Front Door forwards every /demi-projects/* to rproxy; the regex
+          # above only matches an ObjectId, so any other such path would fall through to `location /`,
+          # which proxies back to Front Door and loops until a 504. Must stay a plain prefix (no
+          # `^~`), so it terminates non-ObjectId paths without shadowing the regex above.
+          grep -qE '^  location /demi-projects/ \{' conf.d/server.conf.tmpl \
+            || { echo "Error: /demi-projects/ terminator location is missing from server.conf.tmpl"; exit 1; }
+
           echo "✓ nginx config template validation passed"
 
       # The grep above cannot tell a valid config from one that will not start. envsubst turns an
@@ -180,6 +187,11 @@ jobs:
           # for everything else, and the upstream-path count below proves it never got proxied.
           m=$(curl -sg -X POST -u ci:ci-secret -o /dev/null -w '%{http_code}' "http://localhost:18085/demi-projects/000000000000000000000000")
           [ "$m" = 403 ] || { echo "::error::POST /demi-projects/<id> got $m, expected 403 — limit_except GET is gone"; rc=1; }
+          # A non-ObjectId path must dead-end at 404, not fall through to `location /` — that would
+          # proxy back to Front Door, and Front Door forwards /demi-projects/* right back here, an
+          # infinite loop in production that only ends in a 504.
+          nf=$(curl -sg -u ci:ci-secret -o /dev/null -w '%{http_code}' "http://localhost:18085/demi-projects/notanobjectid")
+          [ "$nf" = 404 ] || { echo "::error::GET /demi-projects/notanobjectid got $nf, expected 404 — the terminator location is gone"; rc=1; }
           curl -sg -u ci:ci-secret -o /dev/null "http://localhost:18085/demi-search/search?dataset=Project"
           # Match every form nginx logs for the demi upstream: a resolved address on the first try
           # (127.0.0.1:9999 or [::1]:9999) and the bare hostname it prints for "no live upstreams",

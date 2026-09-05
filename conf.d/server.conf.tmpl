@@ -327,6 +327,13 @@ server {
     proxy_read_timeout    30s;
   }
 
+  # Terminator for every /demi-projects/... path that is NOT an ObjectId. Plain prefix, no `^~`, so
+  # nginx still tries the regex above first — only non-matches land here, dead instead of falling to
+  # `location /` and proxying back to Front Door, which routes /demi-projects/* here and loops to 504.
+  location /demi-projects/ {
+    return 404;
+  }
+
   # Legacy v2 projects routing rewrite to current /api/public/project
   location ~ ^/api/v2/projects/(.+)$ {
     rewrite ^/api/v2/projects/(.+)$ /api/public/project/$1 break;
