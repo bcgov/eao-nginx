@@ -37,7 +37,23 @@ jobs:
               exit 1
             fi
           done
-          
+
+          # THE CREDENTIAL STRIP ON /demi-projects, ASSERTED FROM THE TEMPLATE ITSELF.
+          # `proxy_set_header Authorization "";` is literal, not a ${VAR} envsubst expands, so the
+          # raw template already shows what ships — no render needed. Extract only the
+          # /demi-projects location block, open to its own closing brace, so a strip that exists
+          # elsewhere in the file cannot hide its absence here.
+          demi_projects_block=$(awk '/^  location ~ "\^\/demi-projects/{f=1} f{print} f && /^  \}/{exit}' conf.d/server.conf.tmpl)
+          echo "$demi_projects_block" | grep -qF 'proxy_set_header Authorization "";' \
+            || { echo "Error: /demi-projects location block is missing proxy_set_header Authorization \"\";"; exit 1; }
+
+          # THE 404 TERMINATOR. Front Door forwards every /demi-projects/* to rproxy; the regex
+          # above only matches an ObjectId, so any other such path would fall through to `location /`,
+          # which proxies back to Front Door and loops until a 504. Must stay a plain prefix (no
+          # `^~`), so it terminates non-ObjectId paths without shadowing the regex above.
+          grep -qE '^  location /demi-projects/ \{' conf.d/server.conf.tmpl \
+            || { echo "Error: /demi-projects/ terminator location is missing from server.conf.tmpl"; exit 1; }
+
           echo "✓ nginx config template validation passed"
 
       # The grep above cannot tell a valid config from one that will not start. envsubst turns an
@@ -142,7 +158,7 @@ jobs:
           # — delete that one line and it becomes an anonymous internet-reachable proxy onto
           # demi-api while every page around it stays behind auth. DEMI points at the same dead
           # port as ROOT here, so the authenticated 502 assertion below reads identically for it.
-          for p in / /public /lib /demi-search/search /demi-search/bulk-downloads /demi-search/bulk-downloads/z; do
+          for p in / /public /lib /demi-search/search /demi-search/bulk-downloads /demi-search/bulk-downloads/z /demi-projects/000000000000000000000000; do
             anon=$(curl -s -o /dev/null -w '%{http_code}' "http://localhost:18085$p")
             auth=$(curl -s -u ci:ci-secret -o /dev/null -w '%{http_code}' "http://localhost:18085$p")
             echo "  anonymous $p -> $anon ; authenticated $p -> $auth"
@@ -163,9 +179,19 @@ jobs:
           # Status cannot discriminate: both upstreams are dead, so everything is 502. The
           # discriminator is WHICH upstream nginx tried, read out of the error log — ROOT is
           # 127.0.0.1:9 and DEMI is 127.0.0.1:9999, deliberately different ports.
-          for p in /demi-search/documents /demi-search/projects /demi-search/api-docs /demi-search/boundaries /demi-search/ /demi-search/search/; do
+          for p in /demi-search/documents /demi-search/projects /demi-search/api-docs /demi-search/boundaries /demi-search/ /demi-search/search/ \
+                   /demi-projects /demi-projects/ /demi-projects/notanobjectid /demi-projects/000000000000000000000000/documents; do
             curl -sg -u ci:ci-secret -o /dev/null "http://localhost:18085$p"
           done
+          # Only GET and HEAD may reach demi-api on the project route; `limit_except GET` answers 403
+          # for everything else, and the upstream-path count below proves it never got proxied.
+          m=$(curl -sg -X POST -u ci:ci-secret -o /dev/null -w '%{http_code}' "http://localhost:18085/demi-projects/000000000000000000000000")
+          [ "$m" = 403 ] || { echo "::error::POST /demi-projects/<id> got $m, expected 403 — limit_except GET is gone"; rc=1; }
+          # A non-ObjectId path must dead-end at 404, not fall through to `location /` — that would
+          # proxy back to Front Door, and Front Door forwards /demi-projects/* right back here, an
+          # infinite loop in production that only ends in a 504.
+          nf=$(curl -sg -u ci:ci-secret -o /dev/null -w '%{http_code}' "http://localhost:18085/demi-projects/notanobjectid")
+          [ "$nf" = 404 ] || { echo "::error::GET /demi-projects/notanobjectid got $nf, expected 404 — the terminator location is gone"; rc=1; }
           curl -sg -u ci:ci-secret -o /dev/null "http://localhost:18085/demi-search/search?dataset=Project"
           # Match every form nginx logs for the demi upstream: a resolved address on the first try
           # (127.0.0.1:9999 or [::1]:9999) and the bare hostname it prints for "no live upstreams",
@@ -176,13 +202,15 @@ jobs:
             | sed -nE 's#.*upstream: "http://(127\.0\.0\.1:9999|\[::1\]:9999|localhost)(/[^"?]*)[^"]*".*#\2#p' \
             | sort -u)
           echo "$demi_hits"
-          # Exactly three upstream URIs may ever be reached: /api/search from the exact-match
-          # search location, and /api/bulk-downloads plus /api/bulk-downloads/z from the
-          # bulk-downloads prefix location (probed by the auth loop above). Anything else means a
-          # location widened and demi-api's route table is reachable anonymously.
-          [ "$(echo "$demi_hits" | grep -c .)" = 3 ] \
+          # Exactly four upstream URIs may ever be reached: /api/search from the exact-match search
+          # location, /api/bulk-downloads plus /api/bulk-downloads/z from the bulk-downloads prefix
+          # location, and one /api/projects/<ObjectId> from the /demi-projects regex (all probed by
+          # the loops above). Anything else means a location widened and demi-api's route table is
+          # reachable anonymously — including a bare /api/projects, its list route, which the
+          # /demi-projects probes deliberately try to provoke.
+          [ "$(echo "$demi_hits" | grep -c .)" = 4 ] \
             || { echo "::error::unexpected set of upstream paths reached demi-api — a location is wider than intended"; rc=1; }
-          for u in /api/search /api/bulk-downloads /api/bulk-downloads/z; do
+          for u in /api/search /api/bulk-downloads /api/bulk-downloads/z /api/projects/000000000000000000000000; do
             echo "$demi_hits" | grep -qx "$u" \
               || { echo "::error::demi-api was not reached at the expected upstream path $u"; rc=1; }
           done
