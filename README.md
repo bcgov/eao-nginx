@@ -1,6 +1,6 @@
 # eao-nginx (rproxy)
 
-Reverse proxy for the EPIC platform. Routes traffic between eagle-public, eagle-admin, eagle-api, and penguin-analytics services.
+Reverse proxy for the EPIC platform. Routes traffic between eagle-public, eagle-admin, eagle-api and the analytics API.
 
 ## Documentation
 

@@ -122,6 +122,10 @@ spec:
               value: {{ .Values.nginx.epic.proxy.eguide | quote }}
             - name: NGINX__EPIC__PROXY__ANALYTICS
               value: {{ .Values.nginx.epic.proxy.analytics | quote }}
+            # The bare /analytics ingest URL only, which stays on penguin in every environment
+            # while both analytics stacks receive events. Delete with that location block.
+            - name: NGINX__EPIC__PROXY__ANALYTICS_LEGACY
+              value: {{ .Values.nginx.epic.proxy.analyticsLegacy | quote }}
             - name: NGINX__EPIC__PROXY__CERTBOT
               value: {{ .Values.nginx.epic.proxy.certbot | quote }}
             # Sentinel default, not decoration: envsubst turns an empty value into `proxy_pass ;`,

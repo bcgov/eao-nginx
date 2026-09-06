@@ -1,6 +1,6 @@
 apiVersion: v2
 name: rproxy
-description: Reverse proxy for EPIC platform (eagle-public, eagle-admin, eagle-api, penguin-analytics)
+description: Reverse proxy for EPIC platform (eagle-public, eagle-admin, eagle-api, analytics)
 type: application
 version: 1.0.0
 appVersion: "1.0.0"

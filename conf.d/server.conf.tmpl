@@ -123,10 +123,24 @@ server {
     return 301 https://www2.gov.bc.ca/assets/download/F3F5FA681ADD4912B19A8DE62CBB451E;
   }
 
-  # Redirect legacy /api/analytics path used by cached env.js (pre-v2.4.1)
+  # Redirect legacy /api/analytics path used by cached env.js (pre-v2.4.1). Internal re-route, so
+  # the bare /analytics block below owns the upstream and its directives instead of a second copy.
   location = /api/analytics {
+    rewrite ^ /analytics last;
+  }
+
+  # ── ANALYTICS: ONE PATH PREFIX, TWO UPSTREAMS WHILE THE MIGRATION RUNS ─────────────────────
+  # `= /analytics`, the bare URL, is the single-event POST the DEPLOYED eagle-public and
+  # eagle-admin plugins send. It stays on penguin (ANALYTICS_LEGACY) in every environment until
+  # the event counts from both stacks have been compared; this block dies with penguin.
+  #
+  # `^~ /analytics/` is the eagle-analytics API — /events for ingest, /query and /dashboards for
+  # the staff screens — which is the APIM gateway in dev and test and still penguin in prod, where
+  # the one live path below the prefix is /analytics/webhook/gcnotify. Both keep the analytics
+  # rate-limit zone: the split changes which upstream answers, not the per-IP budget.
+  location = /analytics {
     limit_req zone=analytics burst=30 nodelay;
-    proxy_pass ${NGINX__EPIC__PROXY__ANALYTICS}/analytics;
+    proxy_pass ${NGINX__EPIC__PROXY__ANALYTICS_LEGACY}/analytics;
     proxy_http_version 1.1;
     proxy_pass_request_headers on;
     proxy_connect_timeout 5s;
@@ -134,16 +148,43 @@ server {
     proxy_read_timeout 10s;
   }
 
-  # Analytics API - proxies to penguin-analytics service
-  # Used by eagle-public and eagle-admin for anonymous usage tracking
-  location /analytics {
+  # `^~` like the other external upstreams, so no regex location can take this prefix. While
+  # ANALYTICS is an https host both traps at `location ^~ /eagle-search/` apply (the gateway needs
+  # SNI; with no `resolver` here the name resolves ONCE at config load), and both directives are
+  # harmless against a ClusterIP upstream, so they stay in place for prod. Host is left to default
+  # to $proxy_host, the name APIM routes on. Timeouts are the sibling APIM ones rather than
+  # penguin's 5s/10s: the gateway fronts a scale-to-zero Function, and a cold start answers well
+  # past 10s.
+  #
+  # NO Authorization strip here. The bearer on /analytics/query and /analytics/dashboards IS the
+  # authorization eagle-analytics enforces, and prod's GC Notify webhook authenticates the same
+  # way. Only anonymous ingest gets stripped — next block.
+  location ^~ /analytics/ {
     limit_req zone=analytics burst=30 nodelay;
-    proxy_pass ${NGINX__EPIC__PROXY__ANALYTICS}/analytics;
+    proxy_pass ${NGINX__EPIC__PROXY__ANALYTICS}/analytics/;
     proxy_http_version 1.1;
+    proxy_ssl_server_name on;
     proxy_pass_request_headers on;
-    proxy_connect_timeout 5s;
-    proxy_send_timeout 10s;
-    proxy_read_timeout 10s;
+    proxy_connect_timeout 10s;
+    proxy_send_timeout    60s;
+    proxy_read_timeout    60s;
+  }
+
+  # Anonymous event ingest — a longer prefix than `^~ /analytics/`, so it wins for this path alone.
+  # STRIP THE CREDENTIAL, for the reason at `location = /demi-search/search`: ingest needs no
+  # identity, eagle-admin attaches its Keycloak token to same-origin XHRs regardless, and in dev
+  # and test this upstream is outside the cluster — as is the shared basic-auth credential the
+  # browser keeps sending once the page is authed.
+  location ^~ /analytics/events {
+    limit_req zone=analytics burst=30 nodelay;
+    proxy_pass ${NGINX__EPIC__PROXY__ANALYTICS}/analytics/events;
+    proxy_http_version 1.1;
+    proxy_ssl_server_name on;
+    proxy_pass_request_headers on;
+    proxy_set_header Authorization "";
+    proxy_connect_timeout 10s;
+    proxy_send_timeout    60s;
+    proxy_read_timeout    60s;
   }
 
   # Runtime configuration for the frontends, served by eagle-api from a Config document.

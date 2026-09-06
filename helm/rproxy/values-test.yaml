@@ -26,7 +26,12 @@ nginx:
       admin: "http://eagle-admin:8080"
       public: "http://eagle-public:8080"
       eguide: "http://eagle-api:3000"
-      analytics: "http://penguin-analytics-api:3000"
+      # The APIM gateway in front of the analytics API, which replaces penguin. Bare host, same
+      # shape as `demi:` below: each location adds its own path. Serves everything under /analytics/.
+      analytics: "https://demi-apim-test.azure-api.net"
+      # penguin, still serving the bare /analytics URL the deployed browser plugins POST to. Both
+      # stacks take events until the counts are compared; remove with that location block.
+      analyticsLegacy: "http://penguin-analytics-api:3000"
       certbot: "http://certbot:8080"
       # No eagle-search route: eagle-search-api-test retired 2026-08-25; test search is demi-api
       # via /demi-search. The deployment renders the sentinel, as in dev.
@@ -56,16 +61,6 @@ httpBasic:
     directive: "auth_basic \"Restricted Content\"; auth_basic_user_file /tmp/.htpasswd2;"
     username: ""
     password: ""
-
-# Test-specific server block configuration
-nginxTest:
-  serverName: "test.projects.eao.gov.bc.ca"
-  proxy:
-    root: "http://eagle-public:8080"
-    api: "http://eagle-api:3000"
-    admin: "http://eagle-admin:8080"
-    public: "http://eagle-public:8080"
-    analytics: "http://penguin-analytics-api:3000"
 
 route:
   enabled: false  # Route already exists, managed separately

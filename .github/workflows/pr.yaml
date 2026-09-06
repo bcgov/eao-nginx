@@ -71,16 +71,18 @@ jobs:
               --add-host eagle-admin:127.0.0.1 --add-host penguin-analytics-api:127.0.0.1 \
               --add-host certbot:127.0.0.1 --add-host eagle-search.example.test:127.0.0.1 \
               --add-host demi-api.example.test:127.0.0.1 \
+              --add-host demi-apim.example.test:127.0.0.1 \
               -e NGINX__EPIC__SERVER_NAME=example.test \
               -e NGINX__AJAX__SERVER_NAME=ajax.example.test -e NGINX__AJAX__REDIRECT=example.test/x \
               -e NGINX__EPIC__PROXY__ROOT=http://eagle-public:8080 \
               -e NGINX__EPIC__PROXY__API=http://eagle-api:3000 \
               -e NGINX__EPIC__PROXY__ADMIN=http://eagle-admin:8080 \
               -e NGINX__EPIC__PROXY__EGUIDE=http://eagle-api:3000 \
-              -e NGINX__EPIC__PROXY__ANALYTICS=http://penguin-analytics-api:3000 \
               -e NGINX__EPIC__PROXY__CERTBOT=http://certbot:8080 \
               -e NGINX__EPIC__PROXY__SEARCH="$1" \
               -e NGINX__EPIC__PROXY__DEMI="$2" \
+              -e NGINX__EPIC__PROXY__ANALYTICS="$3" \
+              -e NGINX__EPIC__PROXY__ANALYTICS_LEGACY=http://penguin-analytics-api:3000 \
               -e HTTP_BASIC= -e HTTP_BASIC1= \
               -v "$PWD/conf.d/server.conf.tmpl:/etc/nginx/templates/default.conf.template:ro" \
               -v "$PWD/nginx.conf:/etc/nginx/nginx.conf:ro" \
@@ -93,15 +95,19 @@ jobs:
           # Both shapes an environment can render: real https upstreams, and the localhost
           # sentinel that stands in where the service does not exist. SEARCH and DEMI take the
           # same two shapes and are varied together — only test has both, dev and prod render
-          # the sentinel for at least one of them.
+          # the sentinel for at least one of them. ANALYTICS varies for a different reason: dev
+          # and test render an https gateway host, prod an in-cluster Service, and only the https
+          # shape reaches the `proxy_ssl_server_name` path.
           #
           # The host is pinned to 127.0.0.1 like every other upstream here, and is deliberately
           # not a real one. nginx resolves each proxy_pass host at config load, so naming a live
           # Azure App Service made this step fail the day that estate was torn down (#30) — on
           # every branch, for a reason no PR had introduced. What is under test is that the
           # template renders and parses, not that somebody else's DNS still answers.
-          render_and_test "https://eagle-search.example.test" "https://demi-api.example.test"
-          render_and_test "http://localhost:9999" "http://localhost:9999"
+          render_and_test "https://eagle-search.example.test" "https://demi-api.example.test" \
+            "https://demi-apim.example.test"
+          render_and_test "http://localhost:9999" "http://localhost:9999" \
+            "http://penguin-analytics-api:3000"
           echo "✓ rendered config passes nginx -t"
 
       # nginx -t proves the config PARSES. It does not prove the auth directive is still in it.
@@ -129,6 +135,7 @@ jobs:
             -e NGINX__EPIC__PROXY__PUBLIC=http://eagle-public:8080 \
             -e NGINX__EPIC__PROXY__EGUIDE=http://eagle-api:3000 \
             -e NGINX__EPIC__PROXY__ANALYTICS=http://penguin-analytics-api:3000 \
+            -e NGINX__EPIC__PROXY__ANALYTICS_LEGACY=http://penguin-analytics-api:3000 \
             -e NGINX__EPIC__PROXY__CERTBOT=http://certbot:8080 \
             -e NGINX__EPIC__PROXY__SEARCH=http://localhost:9999 \
             -e NGINX__EPIC__PROXY__DEMI=http://localhost:9999 \
@@ -230,26 +237,101 @@ jobs:
           # So this uses a REPORTING upstream instead of a dead port: a one-shot listener that writes
           # the request it received. `--network host` puts nginx in the runner's netns, so
           # 127.0.0.1:19099 reaches it.
-          ( printf 'HTTP/1.1 204 No Content\r\nConnection: close\r\n\r\n' | timeout 20 nc -l -p 19099 > /tmp/upstream-req.txt ) &
-          listener=$!
+          #
+          # `nc -l` serves exactly ONE connection, so every probe below starts its own listener
+          # immediately before its request — never before the readiness loop, which would spend the
+          # listener or let `timeout` expire while nginx was still booting. The bind is waited for,
+          # not slept on: a probe that arrives first gets a refused connect and reads as a strip
+          # that cannot be measured.
+          start_upstream() {  # $1 = port, $2 = file to write the request it receives to
+            : > "$2"
+            ( printf 'HTTP/1.1 204 No Content\r\nConnection: close\r\n\r\n' | timeout 30 nc -l -p "$1" > "$2" ) &
+            upstream_pid=$!
+            timeout 10 sh -c "until ss -ltn 2>/dev/null | grep -q ':$1 '; do sleep 0.2; done" \
+              || { echo "::error::the reporting upstream on port $1 never started listening — fix this check rather than trusting it"; rc=1; }
+          }
+          # Both analytics upstreams report, on their own ports: the split sends the bare /analytics
+          # URL to penguin (ANALYTICS_LEGACY) and everything under /analytics/ to the gateway, and
+          # which one answered is only visible as which port received the request.
           docker run -d --name authstrip --network host \
             -e NGINX__EPIC__SERVER_NAME=localhost \
             -e NGINX__AJAX__SERVER_NAME=ajax.localhost -e NGINX__AJAX__REDIRECT=localhost/x \
             -e NGINX__EPIC__PROXY__ROOT=http://127.0.0.1:19099 \
             -e NGINX__EPIC__PROXY__API=http://127.0.0.1:9 -e NGINX__EPIC__PROXY__ADMIN=http://127.0.0.1:9 \
-            -e NGINX__EPIC__PROXY__EGUIDE=http://127.0.0.1:9 -e NGINX__EPIC__PROXY__ANALYTICS=http://127.0.0.1:9 \
+            -e NGINX__EPIC__PROXY__EGUIDE=http://127.0.0.1:9 \
+            -e NGINX__EPIC__PROXY__ANALYTICS=http://127.0.0.1:19098 \
+            -e NGINX__EPIC__PROXY__ANALYTICS_LEGACY=http://127.0.0.1:19097 \
             -e NGINX__EPIC__PROXY__CERTBOT=http://127.0.0.1:9 \
-            -e NGINX__EPIC__PROXY__SEARCH=http://127.0.0.1:9 -e NGINX__EPIC__PROXY__DEMI=http://127.0.0.1:9999 \
+            -e NGINX__EPIC__PROXY__SEARCH=http://127.0.0.1:9 -e NGINX__EPIC__PROXY__DEMI=http://127.0.0.1:19096 \
             -e HTTP_BASIC='auth_basic "Restricted Content"; auth_basic_user_file /tmp/.htpasswd;' \
             -e HTTP_BASIC1= -e HTTP_BASIC2= \
             -e USERNAME=ci -e PASSWORD=ci-secret \
             rproxy:authcheck >/dev/null
+          # /nginx_status for readiness, not `/`: it answers from nginx itself, so it cannot spend a
+          # reporting listener, and `--network host` makes the request arrive from 127.0.0.1, which
+          # its `allow 127.0.0.1` admits. (The other step polls `/` because `-p` makes requests
+          # arrive from the bridge gateway and every /nginx_status poll 403s there.)
           for i in $(seq 1 20); do
-            [ "$(curl -s -o /dev/null -w '%{http_code}' -u ci:ci-secret http://localhost:8080/ 2>/dev/null)" != "000" ] && break
+            [ "$(curl -s -o /dev/null -w '%{http_code}' http://localhost:8080/nginx_status 2>/dev/null)" = 200 ] && break
             sleep 1
           done
+
+          start_upstream 19099 /tmp/upstream-req.txt
           curl -s -o /dev/null -u ci:ci-secret http://localhost:8080/ || true
-          wait $listener 2>/dev/null || true
+          wait $upstream_pid 2>/dev/null || true
+
+          # The bare /analytics URL, the shape the DEPLOYED plugins POST: it must reach penguin on
+          # 19097 and not the gateway on 19098, or the migration's dual-write week is over the
+          # moment this ships.
+          start_upstream 19097 /tmp/upstream-legacy.txt
+          curl -s -o /dev/null -X POST -u ci:ci-secret http://localhost:8080/analytics || true
+          wait $upstream_pid 2>/dev/null || true
+
+          # The legacy alias is a rewrite now, not a second proxy_pass. It must land on the same
+          # penguin upstream, with /api dropped.
+          start_upstream 19097 /tmp/upstream-legacy-alias.txt
+          curl -s -o /dev/null -X POST -u ci:ci-secret http://localhost:8080/api/analytics || true
+          wait $upstream_pid 2>/dev/null || true
+
+          # The new API's ingest path. A bearer, because that is the header that must not survive:
+          # eagle-admin attaches its Keycloak token to same-origin XHRs, and this upstream is an
+          # APIM gateway outside the cluster in dev and test. Basic would prove the same thing,
+          # so -u is left out to keep the failure message unambiguous.
+          start_upstream 19098 /tmp/upstream-events.txt
+          curl -s -o /dev/null -X POST -H 'Authorization: Bearer ci-probe-token' \
+            http://localhost:8080/analytics/events || true
+          wait $upstream_pid 2>/dev/null || true
+
+          # The staff reporting path, where the bearer IS the authorization eagle-analytics
+          # enforces. Stripping it here would 401 every dashboard, and no status-code assertion in
+          # this file would notice — both upstreams answer 204.
+          start_upstream 19098 /tmp/upstream-query.txt
+          curl -s -o /dev/null -X POST -H 'Authorization: Bearer ci-probe-token' \
+            http://localhost:8080/analytics/query || true
+          wait $upstream_pid 2>/dev/null || true
+
+          # THE SAME STRIP ON EVERY DEMI LOCATION, which until now nothing asserted: the only
+          # reporting probe was `location /`, so deleting proxy_set_header Authorization "" from any
+          # of these left every check green while the shared dev/test basic-auth credential reached
+          # demi-api — where it also fires the forged-credential path on each legitimate request.
+          # Each path is checked for the upstream URI as well, so a widened location cannot pass by
+          # arriving somewhere else with no header.
+          while read -r path upstream_path; do
+            start_upstream 19096 /tmp/upstream-demi.txt
+            curl -sg -o /dev/null -u ci:ci-secret "http://localhost:8080$path" || true
+            wait $upstream_pid 2>/dev/null || true
+            echo "  GET $path -> demi upstream saw: $(head -1 /tmp/upstream-demi.txt | tr -d '\r')"
+            grep -qiE "^GET $upstream_path(\?[^ ]*)? HTTP" /tmp/upstream-demi.txt \
+              || { echo "::error::GET $path did not reach demi-api as $upstream_path — this check cannot discriminate, fix it rather than trusting it"; rc=1; }
+            grep -qi '^authorization:' /tmp/upstream-demi.txt \
+              && { echo "::error::location $path forwarded the Authorization header to demi-api — the shared basic-auth credential leaves the cluster and demi-api logs it as a forged credential. Restore proxy_set_header Authorization \"\"; in that block"; rc=1; }
+          done <<'DEMI_PATHS'
+          /demi-search/search?dataset=Project /api/search
+          /demi-search/bulk-downloads /api/bulk-downloads
+          /s/abc /api/s/abc
+          /demi-projects/000000000000000000000000 /api/projects/000000000000000000000000
+          DEMI_PATHS
+
           docker rm -f authstrip >/dev/null 2>&1 || true
 
           # The listener must have seen the request at all, or this proves nothing either way.
@@ -258,6 +340,26 @@ jobs:
           grep -qi '^authorization:' /tmp/upstream-req.txt \
             && { echo "::error::location / forwarded the Authorization header upstream — the shared basic-auth credential leaves the cluster on every page request. Restore proxy_set_header Authorization \"\"; in that block"; rc=1; }
           echo "  location / upstream saw $(grep -c . /tmp/upstream-req.txt) header line(s), Authorization absent"
+
+          grep -qi '^POST /analytics HTTP' /tmp/upstream-legacy.txt \
+            || { echo "::error::POST /analytics did not reach the penguin upstream as /analytics — the bare ingest URL the deployed plugins use is broken or has been repointed at the gateway"; rc=1; }
+          echo "  POST /analytics -> legacy upstream saw: $(head -1 /tmp/upstream-legacy.txt | tr -d '\r')"
+
+          grep -qi '^POST /analytics HTTP' /tmp/upstream-legacy-alias.txt \
+            || { echo "::error::POST /api/analytics did not reach the penguin upstream as /analytics — the rewrite to the bare block is gone"; rc=1; }
+          echo "  POST /api/analytics -> legacy upstream saw: $(head -1 /tmp/upstream-legacy-alias.txt | tr -d '\r')"
+
+          grep -qi '^POST /analytics/events HTTP' /tmp/upstream-events.txt \
+            || { echo "::error::POST /analytics/events did not reach the analytics gateway as /analytics/events — the new API's ingest path is not routed"; rc=1; }
+          grep -qi '^authorization:' /tmp/upstream-events.txt \
+            && { echo "::error::location /analytics/events forwarded the Authorization header upstream — a Keycloak bearer token or the shared basic-auth credential leaves the cluster to the analytics gateway. Restore proxy_set_header Authorization \"\"; in that block"; rc=1; }
+          echo "  POST /analytics/events -> gateway upstream saw: $(head -1 /tmp/upstream-events.txt | tr -d '\r')"
+
+          grep -qi '^POST /analytics/query HTTP' /tmp/upstream-query.txt \
+            || { echo "::error::POST /analytics/query did not reach the analytics gateway as /analytics/query — the staff reporting path is not routed"; rc=1; }
+          grep -qi '^authorization: bearer ci-probe-token' /tmp/upstream-query.txt \
+            || { echo "::error::POST /analytics/query lost its Authorization header — the strip belongs on /analytics/events only, and eagle-analytics authorizes the reporting screens on that bearer"; rc=1; }
+          echo "  POST /analytics/query -> gateway upstream saw: $(head -1 /tmp/upstream-query.txt | tr -d '\r')"
 
           # Worker cap: `auto` means one worker per node core (32 on silver), the OOM kills behind the
           # 2026-09-02 test 502s, and nginx -t and helm lint both stay green if it comes back.
