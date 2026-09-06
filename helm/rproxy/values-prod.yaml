@@ -42,7 +42,11 @@ nginx:
       admin: "http://eagle-admin:8080"
       public: "http://eagle-public:8080"
       eguide: "http://eagle-api:3000"
-      analytics: "http://penguin-analytics-api:3000"  # Production does not have analytics configured
+      # Prod stays on penguin until the analytics cutover, so both upstreams are the same Service.
+      # /analytics/webhook/gcnotify keeps its Authorization header — the strip in server.conf.tmpl is
+      # on /analytics/events alone.
+      analytics: "http://penguin-analytics-api:3000"
+      analyticsLegacy: "http://penguin-analytics-api:3000"
       certbot: "http://certbot:8080"
       # /eagle-search/ upstream removed 2026-08-26 ahead of deleting eagle-search-api-prod; search is
       # /demi-search (demi:). Rollback for search is the Mongo kill switch (SEARCH_API_PATH '' →

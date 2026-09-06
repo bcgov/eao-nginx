@@ -14,7 +14,13 @@ nginx:
       admin: "http://eagle-admin:8080"
       public: "http://eagle-public:8080"
       eguide: "http://eagle-api:3000"
-      analytics: "http://penguin-analytics-api:3000"
+      # The APIM gateway in front of the analytics API, which replaces penguin. Dev shares the
+      # test estate — there is no dev APIM. Bare host, same shape as `demi:`: each location adds
+      # its own path. Serves everything under /analytics/.
+      analytics: "https://demi-apim-test.azure-api.net"
+      # penguin, still serving the bare /analytics URL the deployed browser plugins POST to. Both
+      # stacks take events until the counts are compared; remove with that location block.
+      analyticsLegacy: "http://penguin-analytics-api:3000"
       certbot: "http://certbot:8080"
       # No eagle-search route: the Azure dev estate was torn down 2026-08-11 (staging lives in
       # c4b0a8-test). Dev clients fall back to eagle-api for search — the documented rollback.
