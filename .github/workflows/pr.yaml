@@ -310,6 +310,23 @@ jobs:
             http://localhost:8080/analytics/query || true
           wait $upstream_pid 2>/dev/null || true
 
+          # THE BROWSER-FACING PREFIX. The frontends call /api/usage/… because ad blockers drop any
+          # request whose URL contains "analytics" before it leaves the page (ERR_BLOCKED_BY_CLIENT
+          # on eagle-admin test, 2026-09-06). nginx rewrites the prefix back to /analytics/… so the
+          # gateway is unchanged, which means the /analytics probes above stay green even if the new
+          # prefix is deleted, misrewritten, or falls through to `location /api` and reaches
+          # eagle-api instead. Both shapes are probed for that reason: ingest, which must lose the
+          # credential, and a sibling path, which must keep it.
+          start_upstream 19098 /tmp/upstream-usage-events.txt
+          curl -s -o /dev/null -X POST -H 'Authorization: Bearer ci-probe-token' \
+            http://localhost:8080/api/usage/events || true
+          wait $upstream_pid 2>/dev/null || true
+
+          start_upstream 19098 /tmp/upstream-usage-query.txt
+          curl -s -o /dev/null -X POST -H 'Authorization: Bearer ci-probe-token' \
+            http://localhost:8080/api/usage/query || true
+          wait $upstream_pid 2>/dev/null || true
+
           # THE SAME STRIP ON EVERY DEMI LOCATION, which until now nothing asserted: the only
           # reporting probe was `location /`, so deleting proxy_set_header Authorization "" from any
           # of these left every check green while the shared dev/test basic-auth credential reached
@@ -360,6 +377,21 @@ jobs:
           grep -qi '^authorization: bearer ci-probe-token' /tmp/upstream-query.txt \
             || { echo "::error::POST /analytics/query lost its Authorization header — the strip belongs on /analytics/events only, and eagle-analytics authorizes the reporting screens on that bearer"; rc=1; }
           echo "  POST /analytics/query -> gateway upstream saw: $(head -1 /tmp/upstream-query.txt | tr -d '\r')"
+
+          # The upstream URI is what proves the rewrite: an /api/usage request that arrived as
+          # /api/usage/events would mean proxy_pass lost its URI part, and one that never arrived at
+          # all means the prefix is gone and eagle-api answered.
+          grep -qi '^POST /analytics/events HTTP' /tmp/upstream-usage-events.txt \
+            || { echo "::error::POST /api/usage/events did not reach the analytics gateway as /analytics/events — the browser-facing ingest prefix is unrouted, its proxy_pass URI is wrong, or the request fell through to location /api"; rc=1; }
+          grep -qi '^authorization:' /tmp/upstream-usage-events.txt \
+            && { echo "::error::location /api/usage/events forwarded the Authorization header upstream — a Keycloak bearer token or the shared basic-auth credential leaves the cluster to the analytics gateway. Restore proxy_set_header Authorization \"\"; in that block"; rc=1; }
+          echo "  POST /api/usage/events -> gateway upstream saw: $(head -1 /tmp/upstream-usage-events.txt | tr -d '\r')"
+
+          grep -qi '^POST /analytics/query HTTP' /tmp/upstream-usage-query.txt \
+            || { echo "::error::POST /api/usage/query did not reach the analytics gateway as /analytics/query — the /api/usage/ prefix does not rewrite every path below it"; rc=1; }
+          grep -qi '^authorization: bearer ci-probe-token' /tmp/upstream-usage-query.txt \
+            || { echo "::error::POST /api/usage/query lost its Authorization header — the strip belongs on /api/usage/events only, and eagle-analytics authorizes the reporting screens on that bearer"; rc=1; }
+          echo "  POST /api/usage/query -> gateway upstream saw: $(head -1 /tmp/upstream-usage-query.txt | tr -d '\r')"
 
           # Worker cap: `auto` means one worker per node core (32 on silver), the OOM kills behind the
           # 2026-09-02 test 502s, and nginx -t and helm lint both stay green if it comes back.

@@ -138,6 +138,13 @@ server {
   # the staff screens — which is the APIM gateway in dev and test and still penguin in prod, where
   # the one live path below the prefix is /analytics/webhook/gcnotify. Both keep the analytics
   # rate-limit zone: the split changes which upstream answers, not the per-IP budget.
+  #
+  # `^~ /api/usage/` is the SAME gateway under a neutral prefix, and it is what a browser is meant
+  # to call. Ad blockers drop any request whose URL contains "analytics" before it leaves the page:
+  # POST /analytics/events returned ERR_BLOCKED_BY_CLIENT on eagle-admin test (2026-09-06), while
+  # the bare POST /analytics to penguin got through. So the frontends send /api/usage/… and this
+  # file rewrites the prefix back to /analytics/… for the upstream, which is unchanged. Both
+  # /analytics spellings stay live through the parity week and are not to be repointed here.
   location = /analytics {
     limit_req zone=analytics burst=30 nodelay;
     proxy_pass ${NGINX__EPIC__PROXY__ANALYTICS_LEGACY}/analytics;
@@ -176,6 +183,37 @@ server {
   # and test this upstream is outside the cluster — as is the shared basic-auth credential the
   # browser keeps sending once the page is authed.
   location ^~ /analytics/events {
+    limit_req zone=analytics burst=30 nodelay;
+    proxy_pass ${NGINX__EPIC__PROXY__ANALYTICS}/analytics/events;
+    proxy_http_version 1.1;
+    proxy_ssl_server_name on;
+    proxy_pass_request_headers on;
+    proxy_set_header Authorization "";
+    proxy_connect_timeout 10s;
+    proxy_send_timeout    60s;
+    proxy_read_timeout    60s;
+  }
+
+  # The browser-facing spelling of `^~ /analytics/`. proxy_pass carries a URI, so the matched
+  # prefix is replaced by it: /api/usage/events reaches the gateway as /analytics/events,
+  # /api/usage/health as /analytics/health. Every directive is copied from the block above rather
+  # than shared, because both spellings must behave identically while both are live.
+  # `^~` on a prefix longer than `/api` wins on prefix length alone, so this cannot fall through to
+  # `location /api` and no regex location is even tried — order in this file is irrelevant.
+  location ^~ /api/usage/ {
+    limit_req zone=analytics burst=30 nodelay;
+    proxy_pass ${NGINX__EPIC__PROXY__ANALYTICS}/analytics/;
+    proxy_http_version 1.1;
+    proxy_ssl_server_name on;
+    proxy_pass_request_headers on;
+    proxy_connect_timeout 10s;
+    proxy_send_timeout    60s;
+    proxy_read_timeout    60s;
+  }
+
+  # Anonymous event ingest, mirroring `^~ /analytics/events`: same longer-prefix win, and the same
+  # credential strip, for the reason given there.
+  location ^~ /api/usage/events {
     limit_req zone=analytics burst=30 nodelay;
     proxy_pass ${NGINX__EPIC__PROXY__ANALYTICS}/analytics/events;
     proxy_http_version 1.1;

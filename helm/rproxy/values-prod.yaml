@@ -44,7 +44,8 @@ nginx:
       eguide: "http://eagle-api:3000"
       # Prod stays on penguin until the analytics cutover, so both upstreams are the same Service.
       # /analytics/webhook/gcnotify keeps its Authorization header — the strip in server.conf.tmpl is
-      # on /analytics/events alone.
+      # on the two ingest locations alone, /analytics/events and its browser-facing spelling
+      # /api/usage/events.
       analytics: "http://penguin-analytics-api:3000"
       analyticsLegacy: "http://penguin-analytics-api:3000"
       certbot: "http://certbot:8080"
