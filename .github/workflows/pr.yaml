@@ -95,9 +95,10 @@ jobs:
           # Both shapes an environment can render: real https upstreams, and the localhost
           # sentinel that stands in where the service does not exist. SEARCH and DEMI take the
           # same two shapes and are varied together — only test has both, dev and prod render
-          # the sentinel for at least one of them. ANALYTICS varies for a different reason: dev
-          # and test render an https gateway host, prod an in-cluster Service, and only the https
-          # shape reaches the `proxy_ssl_server_name` path.
+          # the sentinel for at least one of them. ANALYTICS varies for a different reason: every
+          # environment now renders an https gateway host, which is the only shape that reaches
+          # the `proxy_ssl_server_name` path, while ANALYTICS_LEGACY stays an in-cluster Service —
+          # so the second call keeps a plain-http ANALYTICS to parse that shape too.
           #
           # The host is pinned to 127.0.0.1 like every other upstream here, and is deliberately
           # not a real one. nginx resolves each proxy_pass host at config load, so naming a live
@@ -310,6 +311,15 @@ jobs:
             http://localhost:8080/analytics/query || true
           wait $upstream_pid 2>/dev/null || true
 
+          # THE GC NOTIFY WEBHOOK, the one path under the prefix that must NOT follow
+          # `^~ /analytics/` to the gateway: penguin (19097) owns /analytics/webhook/gcnotify and
+          # eagle-analytics has no such route. A bearer, because penguin is what authenticates GC
+          # Notify and a strip here would reject every delivery.
+          start_upstream 19097 /tmp/upstream-webhook.txt
+          curl -s -o /dev/null -X POST -H 'Authorization: Bearer ci-probe-token' \
+            http://localhost:8080/analytics/webhook/gcnotify || true
+          wait $upstream_pid 2>/dev/null || true
+
           # THE BROWSER-FACING PREFIX. The frontends call /api/usage/… because ad blockers drop any
           # request whose URL contains "analytics" before it leaves the page (ERR_BLOCKED_BY_CLIENT
           # on eagle-admin test, 2026-09-06). nginx rewrites the prefix back to /analytics/… so the
@@ -377,6 +387,12 @@ jobs:
           grep -qi '^authorization: bearer ci-probe-token' /tmp/upstream-query.txt \
             || { echo "::error::POST /analytics/query lost its Authorization header — the strip belongs on /analytics/events only, and eagle-analytics authorizes the reporting screens on that bearer"; rc=1; }
           echo "  POST /analytics/query -> gateway upstream saw: $(head -1 /tmp/upstream-query.txt | tr -d '\r')"
+
+          grep -qi '^POST /analytics/webhook/gcnotify HTTP' /tmp/upstream-webhook.txt \
+            || { echo "::error::POST /analytics/webhook/gcnotify did not reach the penguin upstream as /analytics/webhook/gcnotify — the webhook is following ^~ /analytics/ to the analytics gateway, which has no such route, so every GC Notify delivery 404s"; rc=1; }
+          grep -qi '^authorization: bearer ci-probe-token' /tmp/upstream-webhook.txt \
+            || { echo "::error::POST /analytics/webhook/gcnotify lost its Authorization header — penguin authenticates GC Notify on that bearer and rejects a delivery without it"; rc=1; }
+          echo "  POST /analytics/webhook/gcnotify -> legacy upstream saw: $(head -1 /tmp/upstream-webhook.txt | tr -d '\r')"
 
           # The upstream URI is what proves the rewrite: an /api/usage request that arrived as
           # /api/usage/events would mean proxy_pass lost its URI part, and one that never arrived at
