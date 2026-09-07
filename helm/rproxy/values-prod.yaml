@@ -135,11 +135,6 @@ config:
     url: "https://loginproxy.gov.bc.ca/auth"
     realm: "eao-epic"
     enabled: true
-  analytics:
-    apiUrl: "/analytics"
-    debug: false
-    enhancedTracking: true
-    trafficTracking: true
   survey:
     url: null
     showBanner: false
