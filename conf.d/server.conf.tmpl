@@ -154,6 +154,13 @@ server {
     return 410;
   }
 
+  # The slash-less spelling, paired with the block above the way `location = /analytics` is paired
+  # with `^~ /analytics/`. Without it this one URL falls to `^~ /analytics/` and carries its
+  # Authorization header to the gateway.
+  location = /analytics/webhook {
+    return 410;
+  }
+
   # `^~` like the other external upstreams, so no regex location can take this prefix. ANALYTICS
   # is an https host, so both traps at `location ^~ /eagle-search/` apply: the gateway needs SNI,
   # and with no `resolver` here the name resolves ONCE at config load. Host is left to default to
