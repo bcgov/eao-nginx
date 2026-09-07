@@ -135,9 +135,10 @@ server {
   # the event counts from both stacks have been compared; this block dies with penguin.
   #
   # `^~ /analytics/` is the eagle-analytics API — /events for ingest, /query and /dashboards for
-  # the staff screens — which is the APIM gateway in dev and test and still penguin in prod, where
-  # the one live path below the prefix is /analytics/webhook/gcnotify. Both keep the analytics
-  # rate-limit zone: the split changes which upstream answers, not the per-IP budget.
+  # the staff screens — and it is the APIM gateway in every environment now that prod is cut
+  # over. The one exception is /analytics/webhook/, which penguin still owns; its own block below
+  # says why. Both keep the analytics rate-limit zone: the split changes which upstream answers,
+  # not the per-IP budget.
   #
   # `^~ /api/usage/` is the SAME gateway under a neutral prefix, and it is what a browser is meant
   # to call. Ad blockers drop any request whose URL contains "analytics" before it leaves the page:
@@ -192,6 +193,27 @@ server {
     proxy_connect_timeout 10s;
     proxy_send_timeout    60s;
     proxy_read_timeout    60s;
+  }
+
+  # THE GC NOTIFY WEBHOOK STAYS ON PENGUIN (ANALYTICS_LEGACY), in every environment. penguin-analytics
+  # owns /analytics/webhook/gcnotify — src/server.js mounts /analytics/webhook and routes/webhook.js
+  # answers the /gcnotify POST — and eagle-analytics has no such route, so without this block the
+  # webhook would follow `^~ /analytics/` to the gateway and 404 every delivery. It moves when its
+  # owners move it, not with the analytics cutover. A longer prefix than `^~ /analytics/`, so it wins
+  # for the webhook alone; proxy_pass repeats the matched prefix, which is the path penguin expects.
+  #
+  # NO Authorization strip. GC Notify sends a bearer and penguin is the thing that checks it
+  # (GCNOTIFY_WEBHOOK_BEARER_TOKEN), so a strip here would reject every delivery. Timeouts are
+  # penguin's 5s/10s, as at `location = /analytics`, not the gateway's cold-start ones, and the
+  # upstream is a ClusterIP Service in every environment so there is no SNI to set.
+  location ^~ /analytics/webhook/ {
+    limit_req zone=analytics burst=30 nodelay;
+    proxy_pass ${NGINX__EPIC__PROXY__ANALYTICS_LEGACY}/analytics/webhook/;
+    proxy_http_version 1.1;
+    proxy_pass_request_headers on;
+    proxy_connect_timeout 5s;
+    proxy_send_timeout 10s;
+    proxy_read_timeout 10s;
   }
 
   # The browser-facing spelling of `^~ /analytics/`. proxy_pass carries a URI, so the matched
