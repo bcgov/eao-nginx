@@ -2,7 +2,7 @@
 # eao-nginx (rproxy) - Reverse Proxy for EPIC Platform
 # =============================================================================
 # Modern Dockerfile-based deployment replacing S2I builds and DeploymentConfig.
-# Proxies traffic to eagle-public, eagle-admin, eagle-api, penguin-analytics.
+# Proxies traffic to eagle-public, eagle-admin, eagle-api, the analytics gateway.
 #
 # Build: docker build -t rproxy .
 # Run:   docker run -p 8080:8080 -e NGINX__EPIC__PROXY__API=http://eagle-api:3000 rproxy
