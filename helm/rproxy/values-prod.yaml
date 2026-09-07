@@ -42,14 +42,12 @@ nginx:
       admin: "http://eagle-admin:8080"
       public: "http://eagle-public:8080"
       eguide: "http://eagle-api:3000"
-      # The APIM gateway in front of the analytics API, which replaces penguin. Bare host, same
-      # shape as `demi:` below: each location adds its own path. Serves everything under
-      # /analytics/ EXCEPT /analytics/webhook/, which server.conf.tmpl keeps on analyticsLegacy:
-      # /analytics/webhook/gcnotify is penguin's route and keeps its Authorization header, because
-      # penguin is what authenticates GC Notify. The strip in server.conf.tmpl is on the two ingest
+      # The APIM gateway in front of the analytics API, and the only analytics upstream. Bare host,
+      # same shape as `demi:` below: each location adds its own path. Serves everything under
+      # /analytics/. The GC Notify webhook that used to be carved out of that prefix died with
+      # penguin-analytics. The Authorization strip in server.conf.tmpl is on the two ingest
       # locations alone, /analytics/events and its browser-facing spelling /api/usage/events.
       analytics: "https://demi-apim-prod.azure-api.net"
-      analyticsLegacy: "http://penguin-analytics-api:3000"
       certbot: "http://certbot:8080"
       # /eagle-search/ upstream removed 2026-08-26 ahead of deleting eagle-search-api-prod; search is
       # /demi-search (demi:). Rollback for search is the Mongo kill switch (SEARCH_API_PATH '' →

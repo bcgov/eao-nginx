@@ -120,12 +120,16 @@ spec:
               value: {{ .Values.nginx.epic.proxy.public | quote }}
             - name: NGINX__EPIC__PROXY__EGUIDE
               value: {{ .Values.nginx.epic.proxy.eguide | quote }}
+            # Same sentinel default and the same reason as SEARCH below — see that comment.
             - name: NGINX__EPIC__PROXY__ANALYTICS
-              value: {{ .Values.nginx.epic.proxy.analytics | quote }}
-            # The bare /analytics ingest URL only, which stays on penguin in every environment
-            # while both analytics stacks receive events. Delete with that location block.
+              value: {{ .Values.nginx.epic.proxy.analytics | default "http://localhost:9999" | quote }}
+            # Kept for the same reason as HTTP_BASIC2 above, with no values key behind it: HEAD's
+            # template dropped this variable with the penguin-analytics upstream, but the released
+            # images v2.7.31 and v2.7.32 still expand it, and an unset value renders `proxy_pass ;`
+            # — [emerg], so a rollback to either would not start. Delete when they are no longer
+            # rollback targets.
             - name: NGINX__EPIC__PROXY__ANALYTICS_LEGACY
-              value: {{ .Values.nginx.epic.proxy.analyticsLegacy | quote }}
+              value: "http://localhost:9999"
             - name: NGINX__EPIC__PROXY__CERTBOT
               value: {{ .Values.nginx.epic.proxy.certbot | quote }}
             # Sentinel default, not decoration: envsubst turns an empty value into `proxy_pass ;`,

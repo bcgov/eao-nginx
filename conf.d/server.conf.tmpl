@@ -124,49 +124,37 @@ server {
   }
 
   # Redirect legacy /api/analytics path used by cached env.js (pre-v2.4.1). Internal re-route, so
-  # the bare /analytics block below owns the upstream and its directives instead of a second copy.
+  # the bare /analytics block below is the only place that decides what that URL answers.
   location = /api/analytics {
     rewrite ^ /analytics last;
   }
 
-  # ── ANALYTICS: ONE PATH PREFIX, TWO UPSTREAMS WHILE THE MIGRATION RUNS ─────────────────────
-  # `= /analytics`, the bare URL, is the single-event POST the DEPLOYED eagle-public and
-  # eagle-admin plugins send. It stays on penguin (ANALYTICS_LEGACY) in every environment until
-  # the event counts from both stacks have been compared; this block dies with penguin.
-  #
+  # ── ANALYTICS: ONE UPSTREAM, THE APIM GATEWAY ──────────────────────────────────────────────
   # `^~ /analytics/` is the eagle-analytics API — /events for ingest, /query and /dashboards for
-  # the staff screens — and it is the APIM gateway in every environment now that prod is cut
-  # over. The one exception is /analytics/webhook/, which penguin still owns; its own block below
-  # says why. Both keep the analytics rate-limit zone: the split changes which upstream answers,
-  # not the per-IP budget.
+  # the staff screens — behind the APIM gateway in every environment. It is the only analytics
+  # upstream: penguin-analytics was uninstalled from the 6cdc9e namespaces on 2026-09-07, so the
+  # /analytics/webhook/ block that kept GC Notify on it is gone too. The Engage copy of that
+  # webhook runs in its own namespace and never came through this proxy.
   #
   # `^~ /api/usage/` is the SAME gateway under a neutral prefix, and it is what a browser is meant
   # to call. Ad blockers drop any request whose URL contains "analytics" before it leaves the page:
-  # POST /analytics/events returned ERR_BLOCKED_BY_CLIENT on eagle-admin test (2026-09-06), while
-  # the bare POST /analytics to penguin got through. So the frontends send /api/usage/… and this
-  # file rewrites the prefix back to /analytics/… for the upstream, which is unchanged. Both
-  # /analytics spellings stay live through the parity week and are not to be repointed here.
+  # POST /analytics/events returned ERR_BLOCKED_BY_CLIENT on eagle-admin test (2026-09-06). So the
+  # frontends send /api/usage/… and this file rewrites the prefix back to /analytics/… for the
+  # upstream, which is unchanged. Both spellings keep the analytics rate-limit zone.
+
+  # penguin-analytics retired 2026-09-07, and cached bundles may still POST here.
   location = /analytics {
-    limit_req zone=analytics burst=30 nodelay;
-    proxy_pass ${NGINX__EPIC__PROXY__ANALYTICS_LEGACY}/analytics;
-    proxy_http_version 1.1;
-    proxy_pass_request_headers on;
-    proxy_connect_timeout 5s;
-    proxy_send_timeout 10s;
-    proxy_read_timeout 10s;
+    return 410;
   }
 
-  # `^~` like the other external upstreams, so no regex location can take this prefix. While
-  # ANALYTICS is an https host both traps at `location ^~ /eagle-search/` apply (the gateway needs
-  # SNI; with no `resolver` here the name resolves ONCE at config load), and both directives are
-  # harmless against a ClusterIP upstream, so they stay in place for prod. Host is left to default
-  # to $proxy_host, the name APIM routes on. Timeouts are the sibling APIM ones rather than
-  # penguin's 5s/10s: the gateway fronts a scale-to-zero Function, and a cold start answers well
-  # past 10s.
+  # `^~` like the other external upstreams, so no regex location can take this prefix. ANALYTICS
+  # is an https host, so both traps at `location ^~ /eagle-search/` apply: the gateway needs SNI,
+  # and with no `resolver` here the name resolves ONCE at config load. Host is left to default to
+  # $proxy_host, the name APIM routes on. Timeouts are the sibling APIM ones: the gateway fronts a
+  # scale-to-zero Function, and a cold start answers well past 10s.
   #
   # NO Authorization strip here. The bearer on /analytics/query and /analytics/dashboards IS the
-  # authorization eagle-analytics enforces, and prod's GC Notify webhook authenticates the same
-  # way. Only anonymous ingest gets stripped — next block.
+  # authorization eagle-analytics enforces. Only anonymous ingest gets stripped — next block.
   location ^~ /analytics/ {
     limit_req zone=analytics burst=30 nodelay;
     proxy_pass ${NGINX__EPIC__PROXY__ANALYTICS}/analytics/;
@@ -193,27 +181,6 @@ server {
     proxy_connect_timeout 10s;
     proxy_send_timeout    60s;
     proxy_read_timeout    60s;
-  }
-
-  # THE GC NOTIFY WEBHOOK STAYS ON PENGUIN (ANALYTICS_LEGACY), in every environment. penguin-analytics
-  # owns /analytics/webhook/gcnotify — src/server.js mounts /analytics/webhook and routes/webhook.js
-  # answers the /gcnotify POST — and eagle-analytics has no such route, so without this block the
-  # webhook would follow `^~ /analytics/` to the gateway and 404 every delivery. It moves when its
-  # owners move it, not with the analytics cutover. A longer prefix than `^~ /analytics/`, so it wins
-  # for the webhook alone; proxy_pass repeats the matched prefix, which is the path penguin expects.
-  #
-  # NO Authorization strip. GC Notify sends a bearer and penguin is the thing that checks it
-  # (GCNOTIFY_WEBHOOK_BEARER_TOKEN), so a strip here would reject every delivery. Timeouts are
-  # penguin's 5s/10s, as at `location = /analytics`, not the gateway's cold-start ones, and the
-  # upstream is a ClusterIP Service in every environment so there is no SNI to set.
-  location ^~ /analytics/webhook/ {
-    limit_req zone=analytics burst=30 nodelay;
-    proxy_pass ${NGINX__EPIC__PROXY__ANALYTICS_LEGACY}/analytics/webhook/;
-    proxy_http_version 1.1;
-    proxy_pass_request_headers on;
-    proxy_connect_timeout 5s;
-    proxy_send_timeout 10s;
-    proxy_read_timeout 10s;
   }
 
   # The browser-facing spelling of `^~ /analytics/`. proxy_pass carries a URI, so the matched
