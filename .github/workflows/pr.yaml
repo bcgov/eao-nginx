@@ -290,6 +290,23 @@ jobs:
           [ "$alias" = 410 ] || { echo "::error::POST /api/analytics answered $alias, expected 410 — the rewrite onto the bare /analytics block is gone"; rc=1; }
           echo "  POST /api/analytics -> $alias"
 
+          # The GC Notify webhook penguin served, probed with a bearer: 410 from nginx, before the
+          # access phase, so no credential is needed to assert it. eagle-analytics has no webhook
+          # route, so falling through to `^~ /analytics/` would send a same-origin credential out of
+          # the cluster to APIM; here that shows up as a non-410 from the 19098 upstream, which no
+          # listener is bound to yet.
+          hook=$(curl -s -o /dev/null -w '%{http_code}' -X POST -H 'Authorization: Bearer ci-probe' \
+            http://localhost:8080/analytics/webhook/gcnotify)
+          [ "$hook" = 410 ] || { echo "::error::POST /analytics/webhook/gcnotify answered $hook, expected 410 — the retired webhook path is reaching the analytics gateway with its Authorization header"; rc=1; }
+          echo "  POST /analytics/webhook/gcnotify -> $hook"
+
+          # The slash-less spelling of the same retired path. It has its own exact-match block; drop
+          # that block and this URL alone falls to `^~ /analytics/` and reaches the gateway.
+          bare=$(curl -s -o /dev/null -w '%{http_code}' -X POST -H 'Authorization: Bearer ci-probe' \
+            http://localhost:8080/analytics/webhook)
+          [ "$bare" = 410 ] || { echo "::error::POST /analytics/webhook answered $bare, expected 410 — the slash-less webhook path is reaching the analytics gateway with its Authorization header"; rc=1; }
+          echo "  POST /analytics/webhook -> $bare"
+
           # The new API's ingest path. A bearer, because that is the header that must not survive:
           # eagle-admin attaches its Keycloak token to same-origin XHRs, and this upstream is an
           # APIM gateway outside the cluster in dev and test. Basic would prove the same thing,

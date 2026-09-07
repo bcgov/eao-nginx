@@ -18,10 +18,6 @@ data:
       "KEYCLOAK_URL": {{ .Values.config.keycloak.url | quote }},
       "KEYCLOAK_REALM": {{ .Values.config.keycloak.realm | quote }},
       "KEYCLOAK_ENABLED": {{ .Values.config.keycloak.enabled }},
-      "ANALYTICS_API_URL": {{ .Values.config.analytics.apiUrl | quote }},
-      "ANALYTICS_DEBUG": {{ .Values.config.analytics.debug }},
-      "ANALYTICS_ENHANCED_TRACKING": {{ .Values.config.analytics.enhancedTracking }},
-      "ANALYTICS_TRAFFIC_TRACKING": {{ .Values.config.analytics.trafficTracking }},
       "SURVEY_URL": {{ .Values.config.survey.url | default "null" }},
       "SHOW_SURVEY_BANNER": {{ .Values.config.survey.showBanner }},
       "ENGAGE_API_URL": {{ .Values.config.engage.apiUrl | default "" | quote }}

@@ -133,8 +133,8 @@ server {
   # `^~ /analytics/` is the eagle-analytics API — /events for ingest, /query and /dashboards for
   # the staff screens — behind the APIM gateway in every environment. It is the only analytics
   # upstream: penguin-analytics was uninstalled from the 6cdc9e namespaces on 2026-09-07, so the
-  # /analytics/webhook/ block that kept GC Notify on it is gone too. The Engage copy of that
-  # webhook runs in its own namespace and never came through this proxy.
+  # GC Notify webhook it served is terminated here with a 410 rather than proxied. The Engage copy
+  # of that webhook runs in its own namespace and never came through this proxy.
   #
   # `^~ /api/usage/` is the SAME gateway under a neutral prefix, and it is what a browser is meant
   # to call. Ad blockers drop any request whose URL contains "analytics" before it leaves the page:
@@ -144,6 +144,20 @@ server {
 
   # penguin-analytics retired 2026-09-07, and cached bundles may still POST here.
   location = /analytics {
+    return 410;
+  }
+
+  # The GC Notify webhook penguin served. A longer prefix than `^~ /analytics/`, so it wins for this
+  # path and never reaches the gateway, which has no such route — and the caller's Authorization
+  # header never leaves the cluster.
+  location ^~ /analytics/webhook/ {
+    return 410;
+  }
+
+  # The slash-less spelling, paired with the block above the way `location = /analytics` is paired
+  # with `^~ /analytics/`. Without it this one URL falls to `^~ /analytics/` and carries its
+  # Authorization header to the gateway.
+  location = /analytics/webhook {
     return 410;
   }
 
