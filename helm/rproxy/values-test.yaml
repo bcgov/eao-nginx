@@ -35,6 +35,8 @@ nginx:
       # via /demi-search. The deployment renders the sentinel, as in dev.
       # demi-api on Azure. INTERIM, delete with `location = /demi-search/search` once
       # demi.eao.gov.bc.ca resolves. Bare host: each location adds its own /api/... path.
+      # Three /demi-search locations ride this host: search, bulk-downloads, and config —
+      # eagle-public's runtime config, fetched at boot once its CONFIG_PATH points here.
       demi: "https://demi-apim-test.azure-api.net"
 
 httpBasic:

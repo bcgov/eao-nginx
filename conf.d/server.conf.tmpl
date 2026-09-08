@@ -301,17 +301,18 @@ server {
   # exactly one thing: a gov.bc.ca-shaped origin for the one call, while DNS is pending.
   #
   # `location =`, AN EXACT MATCH, NOT `^~ /demi-search/`. That is the security control here, not a
-  # micro-optimisation. eagle-public reaches this base from exactly ONE call site —
-  # eagle-public/src/app/services/api.ts:199, `${base}/${queryString}` inside searchKeywords(),
-  # where base is searchPath for the three AZURE_DATASETS — and queryString is always built as
-  # `search?dataset=…` (same file, :164). Nothing else in the app reads searchPath; getItem() and
-  # getFullDataSet() are on apiPath. One URL is the entire requirement.
+  # micro-optimisation. Several eagle-public reads hang off the search base now — keyword search
+  # (eagle-public/src/app/api/api.ts, searchBaseFor() for the AZURE_DATASETS, whose query string is
+  # always built as `search?dataset=…`), the bulk-download job calls, and, once CONFIG_PATH points
+  # here, the runtime config fetch. Each gets its own location block spelling out the exact URL
+  # demi-api is asked to answer. This one carries the search URL and nothing else.
   # A prefix match would publish demi-api's WHOLE route table anonymously on a gov.bc.ca origin:
   # GET /projects and GET /documents both accept pageSize up to 1000 (eagle-demi
   # src/controllers/nosql/{project,document}.js clamp there), plus /documents/:id/download,
   # /boundaries and the /api-docs swagger UI. demi-api also mounts its router at BOTH '/api' and
   # '/' (eagle-demi src/app.js), so no second path segment is protecting anything on its side
-  # either. If a second URL ever has to work, add a second `location =` — do not relax this one.
+  # either. A URL that has to work gets its own location, as the two below did — never relax this
+  # one into a prefix over the base.
   #
   # Both App Service traps that `location ^~ /eagle-search/` documents above apply here verbatim,
   # for the same reason (an https upstream that is not a ClusterIP Service): proxy_ssl_server_name
@@ -369,6 +370,41 @@ server {
     proxy_connect_timeout 10s;
     proxy_send_timeout    60s;
     proxy_read_timeout    60s;
+  }
+
+  # eagle-public's runtime config, served by demi-api rather than eagle-api's Mongo `Config`
+  # document. Exact match for the reason at `location = /demi-search/search` above: one URL, never
+  # a prefix over demi-api's route table.
+  #
+  # Timeouts and cache directives copied from `location = /api/config`, for the same reasons that
+  # block gives: this fetch blocks the page's boot behind a 5s AbortSignal in the browser, so nginx
+  # has to give up first (1s connect + 3s read = 4s worst case), and a good config must outlive a
+  # brief demi-api outage. Failures are never cached — demi-api answers 503 with
+  # `Cache-Control: no-store` while the public config document is unseeded, and eagle-public falls
+  # back to /api/config when this returns anything but a whole payload.
+  #
+  # DARK ON ARRIVAL: eagle-public ships CONFIG_PATH empty, so nothing calls this until that flips
+  # per environment. An unanswered route here is expected, not a fault.
+  #
+  # limit_req, unlike `location = /api/config`: a 429 here is survivable because of that fallback,
+  # and this upstream is metered APIM rather than a Service in the namespace.
+  location = /demi-search/config {
+    ${HTTP_BASIC}
+    limit_req zone=api_search burst=20 nodelay;
+    proxy_pass ${NGINX__EPIC__PROXY__DEMI}/api/config/public;
+    proxy_ssl_server_name on;
+    proxy_pass_request_headers on;
+    # STRIP THE BASIC-AUTH CREDENTIAL, for the reason spelled out at `location = /demi-search/search`:
+    # ${HTTP_BASIC} makes the browser attach the shared dev/test credential to this XHR, and
+    # proxy_pass_request_headers would forward it out of the cluster. The gate is enforced here.
+    proxy_set_header Authorization "";
+
+    proxy_cache globalcache;
+    proxy_cache_use_stale error timeout http_500 http_502 http_503 http_504;
+
+    proxy_connect_timeout 1s;
+    proxy_send_timeout    3s;
+    proxy_read_timeout    3s;
   }
 
   # Short links. demi-api owns the code -> URL map; this block only carries /s/ to it.
