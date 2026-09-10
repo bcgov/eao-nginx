@@ -610,4 +610,12 @@ server {
     # No need to log this request, its just noise
     access_log off;
   }
+
+  # Front Door origin health probe. Answers from nginx itself so origin health never depends on
+  # eagle-api or any upstream. Not logged: the edge probes every 120 s from many POPs.
+  location = /healthz {
+    access_log off;
+    default_type text/plain;
+    return 200 "ok\n";
+  }
 }
