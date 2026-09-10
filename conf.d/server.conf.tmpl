@@ -438,6 +438,13 @@ server {
     proxy_read_timeout    30s;
   }
 
+  # Terminator for every /demi-search/documents/... path that is NOT the download regex above. Plain
+  # prefix, no `^~`, so nginx still tries the regex first — only non-matches land here, dead instead of
+  # falling to `location /` and proxying back to Front Door, which routes here and loops to 504.
+  location /demi-search/documents/ {
+    return 404;
+  }
+
   # Short links. demi-api owns the code -> URL map; this block only carries /s/ to it.
   location ^~ /s/ {
     ${HTTP_BASIC}
