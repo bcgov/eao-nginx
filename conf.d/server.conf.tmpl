@@ -376,9 +376,10 @@ server {
   # document. Exact match for the reason at `location = /demi-search/search` above: one URL, never
   # a prefix over demi-api's route table.
   #
-  # Timeouts and cache directives copied from `location = /api/config`, for the same reasons that
-  # block gives: this fetch blocks the page's boot behind a 5s AbortSignal in the browser, so nginx
-  # has to give up first (1s connect + 3s read = 4s worst case). 200 bodies are cached for 1 minute
+  # Timeouts and cache directives copied from `location = /api/config`, adjusted for a slower
+  # upstream: the DEMI Function runs on Flex Consumption, and a cold start takes longer than 3s.
+  # eagle-public's `react` line aborts this fetch at 12s, so nginx still has to give up first
+  # (1s connect + 10s read = 11s worst case). 200 bodies are cached for 1 minute
   # so a good config outlives a brief demi-api outage via proxy_cache_use_stale. 503 is `no-store`
   # upstream and never cached — demi-api answers 503 with `Cache-Control: no-store` while the public
   # config document is unseeded, and eagle-public falls back to /api/config when this returns
@@ -406,7 +407,7 @@ server {
 
     proxy_connect_timeout 1s;
     proxy_send_timeout    3s;
-    proxy_read_timeout    3s;
+    proxy_read_timeout    10s;
   }
 
   # DEMI site access gate (password check). POST only, no caching.
