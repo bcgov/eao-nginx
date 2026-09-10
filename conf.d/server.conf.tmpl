@@ -409,6 +409,35 @@ server {
     proxy_read_timeout    3s;
   }
 
+  # DEMI site access gate (password check). POST only, no caching.
+  location = /demi-search/gate {
+    ${HTTP_BASIC}
+    limit_req zone=api_search burst=20 nodelay;
+    limit_except POST { deny all; }
+    proxy_pass ${NGINX__EPIC__PROXY__DEMI}/api/gate;
+    proxy_ssl_server_name on;
+    proxy_pass_request_headers on;
+    proxy_set_header Authorization "";
+    proxy_connect_timeout 10s;
+    proxy_send_timeout    60s;
+    proxy_read_timeout    60s;
+  }
+
+  # DEMI document download by ObjectId. GET only, no caching; query string (redirect=1) passes through.
+  location ~ "^/demi-search/documents/([0-9a-f]{24})/download$" {
+    ${HTTP_BASIC}
+    limit_req zone=api_general burst=10 nodelay;
+    limit_except GET { deny all; }
+    rewrite "^/demi-search/documents/([0-9a-f]{24})/download$" /api/documents/$1/download break;
+    proxy_pass ${NGINX__EPIC__PROXY__DEMI};
+    proxy_ssl_server_name on;
+    proxy_pass_request_headers on;
+    proxy_set_header Authorization "";
+    proxy_connect_timeout 10s;
+    proxy_send_timeout    30s;
+    proxy_read_timeout    30s;
+  }
+
   # Short links. demi-api owns the code -> URL map; this block only carries /s/ to it.
   location ^~ /s/ {
     ${HTTP_BASIC}
