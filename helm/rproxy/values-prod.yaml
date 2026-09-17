@@ -1,5 +1,5 @@
 # Production environment values for rproxy
-replicaCount: 2
+replicaCount: 0 # rproxy retired; keep 0
 
 image:
   tag: "prod"
