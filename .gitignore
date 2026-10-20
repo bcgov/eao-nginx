@@ -8,8 +8,9 @@
 .DS_Store
 Thumbs.db
 
-# Internal AI assistant notes
+# Local notes
 .github/antigravity.md
 .github/instructions/
 CLAUDE.md
 GEMINI.md
+ANTIGRAVITY.md
