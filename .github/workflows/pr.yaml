@@ -25,7 +25,6 @@ jobs:
           REQUIRED_VARS=(
             "NGINX__EPIC__PROXY__ROOT"
             "NGINX__EPIC__PROXY__API"
-            "NGINX__EPIC__PROXY__ADMIN"
             "NGINX__EPIC__PROXY__ANALYTICS"
           )
           
