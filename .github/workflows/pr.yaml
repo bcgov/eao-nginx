@@ -63,7 +63,6 @@ jobs:
           render_and_test() {
             docker run --rm \
               --add-host eagle-public:127.0.0.1 --add-host eagle-api:127.0.0.1 \
-              --add-host eagle-admin:127.0.0.1 \
               --add-host certbot:127.0.0.1 --add-host eagle-search.example.test:127.0.0.1 \
               --add-host demi-api.example.test:127.0.0.1 \
               --add-host demi-apim.example.test:127.0.0.1 \
@@ -104,7 +103,6 @@ jobs:
           docker build -q -t rproxy:authcheck . >/dev/null
           docker run -d --name authcheck -p 18085:8080 \
             --add-host eagle-public:127.0.0.1 --add-host eagle-api:127.0.0.1 \
-            --add-host eagle-admin:127.0.0.1 \
             --add-host certbot:127.0.0.1 --add-host eagle-search.example.test:127.0.0.1 \
             -e NGINX__EPIC__SERVER_NAME=example.test \
             -e NGINX__AJAX__SERVER_NAME=ajax.example.test -e NGINX__AJAX__REDIRECT=example.test/x \
