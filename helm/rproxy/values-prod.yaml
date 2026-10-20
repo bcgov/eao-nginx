@@ -1,4 +1,3 @@
-# Production environment values for rproxy
 replicaCount: 0 # rproxy retired; keep 0
 
 image:
@@ -8,75 +7,34 @@ nginx:
   epic:
     serverName: "epic-6cdc9e-prod.apps.silver.devops.gov.bc.ca"
     proxy:
-      # Azure Front Door, not the in-cluster eagle-public Service. This hostname is the prod AFD
-      # endpoint in resource group rg-eagle-public-prod (profile eagle-edge-prod, storage
-      # eaglepubprodrhj3zycszo6j, subscription be5924ac-1083-4a1b-be92-7b444882cfd9), read back from
-      # Azure. Never compose it by hand.
-      #
-      # THE ZONE CODE IS a01, AND A WRONG ONE DOES NOT FAIL LOUDLY. A hand-composed
-      # ...z01.azurefd.net name still resolves — the *.z01.azurefd.net Traffic Manager wildcard
-      # answers it at 150.171.110.145, next door to a01's own 150.171.110.146 — and returns
-      # HTTP 404. Combined with the fact that proxy_pass in `location /` holds a literal name that
-      # nginx resolves once at config load, a one-character typo here 404s EVERY page while
-      # /nginx_status and the readiness probe stay green and the rollout reports success.
-      #
-      # No trailing slash and no path. `location /` proxy_passes without a trailing slash, so
-      # anything appended here would be prefixed onto every request URI.
-      #
-      # REQUIRES AN IMAGE BUILT FROM commit 5971894, AND THE REASON IS /public AND /lib, NOT SNI.
-      # 5971894 deletes those two location blocks; every released tag up to v2.7.12 still proxies
-      # them to NGINX__EPIC__PROXY__PUBLIC, which this value does not repoint. Measured against the
-      # v2.7.12 image with this root value: / and the Front Door bundle main-B5FTTDT6.js return 200,
-      # but /public and /lib return the POD's shell, which references main-R2IVE2DY.js — a bundle
-      # Front Door 404s. Two shells on one site, and the pod's one is broken.
-      #
-      # 5971894 also adds `proxy_ssl_server_name on`. That is a correctness fix, not a prerequisite:
-      # measured, v2.7.12 serves this upstream over TLS at 200 with no SNI at all, because
-      # proxy_ssl_verify is off so nobody checks the name Front Door answers with. It stops being
-      # cosmetic the day verification is enabled or a custom domain is attached.
-      #
-      # As of this commit 5971894 is in NO released tag — master is v2.7.12 plus 5971894 — so a tag
-      # has to be cut and deployed before this value is safe to render.
-      root: "https://eagle-public-prod-aafug4ahavgzbvh9.a01.azurefd.net"
+      # Front Door endpoint: read it back from Azure, never compose it. Azure picks the zone (a01);
+      # a wrong one still resolves and 404s every page while the probes stay green.
+      root: "https://eagle-public-prod-aafug4ahavgzbvh9.a01.azurefd.net"  # no trailing slash or path
       api: "http://eagle-api:3000"
       admin: "http://eagle-admin:8080"
       public: "http://eagle-public:8080"
       eguide: "http://eagle-api:3000"
-      # The APIM gateway in front of the analytics API, and the only analytics upstream. Bare host,
-      # same shape as `demi:` below: each location adds its own path. Serves everything under
-      # /analytics/. The GC Notify webhook that used to be carved out of that prefix died with
-      # penguin-analytics. The Authorization strip in server.conf.tmpl is on the two ingest
-      # locations alone, /analytics/events and its browser-facing spelling /api/usage/events.
+      # Bare host: each /analytics location adds its own path.
       analytics: "https://demi-apim-prod.azure-api.net"
       certbot: "http://certbot:8080"
-      # /eagle-search/ upstream removed 2026-08-26 ahead of deleting eagle-search-api-prod; search is
-      # /demi-search (demi:). Rollback for search is the Mongo kill switch (SEARCH_API_PATH '' →
-      # eagle-api serves it). Key absent renders the localhost:9999 sentinel; the location 502s.
-      # demi-api on Azure. INTERIM, delete with `location = /demi-search/search` once
-      # demi.eao.gov.bc.ca resolves. Bare host: each location adds its own /api/... path.
-      # Three /demi-search locations ride this host: search, bulk-downloads, and config —
-      # eagle-public's runtime config, fetched at boot once its CONFIG_PATH points here.
+      # No search key: search goes to demi-api via /demi-search. Bare host: each location adds
+      # its own /api/... path.
       demi: "https://demi-apim-prod.azure-api.net"
 
 httpBasic:
-  # Main endpoint auth disabled in production
   enabled: false
   directive: ""
   username: ""
   password: ""
   
-  # E-guide endpoint requires authentication in production
-  # Credentials injected via GitHub secrets - do NOT hardcode
-
+  # Set from GitHub secrets at deploy time; never commit a value.
   eguide:
     enabled: true
     directive: "auth_basic \"Restricted Content\"; auth_basic_user_file /tmp/.htpasswd1;"
     username: ""
     password: ""
 
-  # Public endpoint auth (HTTP_BASIC2). No /public block exists in server.conf.tmpl any more,
-  # but released images v2.7.7-v2.7.12 still render one — keep these until no deployable
-  # tag does.
+  # HTTP_BASIC2: older tags still render /public; see values.yaml.
   public:
     enabled: false
     directive: ""
@@ -94,43 +52,15 @@ resources:
   requests:
     cpu: 10m
     memory: 50Mi
-# Application configuration served at /api/config
-# Edit via 'oc edit configmap rproxy-config -n 6cdc9e-prod' for instant changes
+# Inert on v2.7.11+ images: eagle-api serves /api/config. Kept for a rollback below v2.7.11;
+# see values-test.yaml.
 config:
   environment: "prod"
   bannerColour: ""
   logLevel: 4
   apiLocation: "https://projects.eao.gov.bc.ca"
   apiPath: "/api"
-  # searchApiPath: DELIBERATELY ABSENT, AND NO LONGER THE SWITCH — do not re-add this key.
-  # `location = /api/config` in conf.d/server.conf.tmpl proxies to eagle-api, which serves the
-  # payload from the Mongo `Config` document (eagle-api api/controllers/config.js PUBLIC_KEYS).
-  # TWO preconditions, and the order between them is load-bearing: this ConfigMap copy goes inert
-  # only once eagle-api is on v2.10.63+ AND the rproxy image is on v2.7.11+. Up to v2.7.10 the
-  # template still served this path with `alias /etc/nginx/config/config.json`, so the rproxy image
-  # must never lead eagle-api — deploy rproxy first and /api/config 404s until eagle-api catches up,
-  # which white-screens eagle-admin.
-  #
-  # THAT WARNING IS NOW HISTORICAL, BOTH CONDITIONS SATISFIED. It is kept because it is the reason
-  # the sequencing was safe, and because it binds again in reverse: any rollback that takes the
-  # rproxy image below v2.7.11 needs /api/config to come back to this file with it. As of
-  # 2026-08-21 prod eagle-api is v2.10.65 and prod rproxy is v2.7.12; the /api/config move landed in
-  # rproxy v2.7.11 and prod crossed it on 2026-08-20.
-  #
-  # The measurement recorded here was taken on 2026-08-17 and has since been overtaken. It said test
-  # already served eagle-api's 15 keys "while production still returned this ConfigMap's 18 keys".
-  # The first half still holds; the second stopped being true on 2026-08-20. Re-measured 2026-08-21,
-  # prod /api/config returns eagle-api's 15 keys with SEARCH_API_PATH '/eagle-search'.
-  #
-  # THE ARITHMETIC, because the key sets are easy to state wrongly. The 18-key payload prod served
-  # until 2026-08-20 was the v2.7.10 ConfigMap. Four of its keys are absent from what eagle-api
-  # returns: API_LOCATION, KEYCLOAK_CLIENT_ID, TYPESENSE_ENABLED and ENGAGE_API_URL. eagle-api adds
-  # SEARCH_API_PATH. 18 - 4 + 1 = 15.
-  #
-  # None of them is load-bearing — TYPESENSE_ENABLED is dead, API_LOCATION is dev-proxy only, ENGAGE_API_URL is unused,
-  # and eagle-admin preserves KEYCLOAK_CLIENT_ID from its own env.js — and prod has run without
-  # them since 2026-08-20 with no breakage. So every key in this block is now rendered, mounted
-  # and read by nobody.
+  # searchApiPath stays absent: the live value is SEARCH_API_PATH in eagle-api's Mongo Config.
   adminPath: "/admin/"
   keycloak:
     clientId: "eagle-api-console"

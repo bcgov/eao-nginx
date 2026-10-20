@@ -80,15 +80,8 @@ spec:
                 secretKeyRef:
                   name: rproxy-basic-auth
                   key: eguide-password
-            # KEPT DELIBERATELY THOUGH server.conf.tmpl NO LONGER REFERENCES THEM. The chart is
-            # rendered from the DEFAULT BRANCH at deploy time (deploy-to-prod.yaml checks out with
-            # no `ref:`) while `--set image.tag` selects an older image. Every released tag
-            # v2.7.6-v2.7.12 bakes a template that still expands ${HTTP_BASIC2} and
-            # ${NGINX__EPIC__PROXY__PUBLIC}, and the nginx entrypoint's envsubst leaves an UNSET
-            # variable as a literal — which nginx then parses as a directive and refuses to start:
-            # `[emerg] unexpected "}"`. Dropping these breaks every deploy of, and every rollback
-            # to, an existing tag. They cost nothing here; remove them only once no deployable tag
-            # references them.
+            # Unused by server.conf.tmpl, but tags up to v2.7.12 expand them and an unset variable
+            # breaks nginx; pr.yaml's guard keeps every variable a tag >= MIN_TAG expands.
             - name: HTTP_BASIC2
               value: {{ .Values.httpBasic.public.directive | quote }}
             - name: USERNAME2
@@ -101,12 +94,10 @@ spec:
                 secretKeyRef:
                   name: rproxy-basic-auth
                   key: public-password
-            # Ajax redirect configuration
             - name: NGINX__AJAX__SERVER_NAME
               value: {{ .Values.nginx.ajax.serverName | quote }}
             - name: NGINX__AJAX__REDIRECT
               value: {{ .Values.nginx.ajax.redirect | quote }}
-            # EPIC server configuration
             - name: NGINX__EPIC__SERVER_NAME
               value: {{ .Values.nginx.epic.serverName | quote }}
             - name: NGINX__EPIC__PROXY__ROOT
@@ -115,33 +106,25 @@ spec:
               value: {{ .Values.nginx.epic.proxy.api | quote }}
             - name: NGINX__EPIC__PROXY__ADMIN
               value: {{ .Values.nginx.epic.proxy.admin | quote }}
-            # Kept for the same reason as HTTP_BASIC2 above: released images still expand it.
+            # Kept like HTTP_BASIC2: released tags still expand it.
             - name: NGINX__EPIC__PROXY__PUBLIC
               value: {{ .Values.nginx.epic.proxy.public | quote }}
             - name: NGINX__EPIC__PROXY__EGUIDE
               value: {{ .Values.nginx.epic.proxy.eguide | quote }}
-            # Same sentinel default and the same reason as SEARCH below — see that comment.
+            # Sentinel default, same reason as SEARCH below.
             - name: NGINX__EPIC__PROXY__ANALYTICS
               value: {{ .Values.nginx.epic.proxy.analytics | default "http://localhost:9999" | quote }}
-            # Kept for the same reason as HTTP_BASIC2 above, with no values key behind it: HEAD's
-            # template dropped this variable with the penguin-analytics upstream, but the released
-            # images v2.7.31 and v2.7.32 still expand it, and an unset value renders `proxy_pass ;`
-            # — [emerg], so a rollback to either would not start. Delete when they are no longer
-            # rollback targets.
+            # Kept like HTTP_BASIC2, with no values key: tags v2.7.31 and v2.7.32 expand it, and an
+            # unset value renders `proxy_pass ;`.
             - name: NGINX__EPIC__PROXY__ANALYTICS_LEGACY
               value: "http://localhost:9999"
             - name: NGINX__EPIC__PROXY__CERTBOT
               value: {{ .Values.nginx.epic.proxy.certbot | quote }}
-            # Sentinel default, not decoration: envsubst turns an empty value into `proxy_pass ;`,
-            # which is [emerg] and takes the whole proxy down — conf.d is included into http {}.
-            # An unreachable localhost port gives an environment with no search service a 502
-            # instead of a CrashLoopBackOff. Same shape the Typesense upstream used before d7dc62c.
+            # Sentinel default: an empty value renders `proxy_pass ;`, an [emerg] that stops the whole
+            # proxy. An unreachable port gives a 502 instead of a CrashLoopBackOff.
             - name: NGINX__EPIC__PROXY__SEARCH
               value: {{ .Values.nginx.epic.proxy.search | default "http://localhost:9999" | quote }}
-            # demi-api: the /demi-search, /s/ and /demi-projects locations in server.conf.tmpl.
-            # Same sentinel default and the same reason as SEARCH directly above — see that
-            # comment. Dev sets no value, so it renders the sentinel and that one location 502s
-            # there instead of the pod refusing to start.
+            # demi-api for /demi-search, /s/ and /demi-projects; sentinel default as for SEARCH.
             - name: NGINX__EPIC__PROXY__DEMI
               value: {{ .Values.nginx.epic.proxy.demi | default "http://localhost:9999" | quote }}
           volumeMounts:
