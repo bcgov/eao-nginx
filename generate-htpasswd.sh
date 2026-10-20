@@ -1,10 +1,8 @@
 #!/bin/sh
-# Generate htpasswd files from environment variables for HTTP Basic Auth
-# Used for dev/test environments to protect eagle-public routes
+# Writes the htpasswd files that the HTTP_BASIC and HTTP_BASIC1 directives read.
 
 set -e
 
-# Function to generate htpasswd file
 generate_htpasswd() {
     local username="$1"
     local password="$2"
@@ -12,8 +10,7 @@ generate_htpasswd() {
     
     if [ -n "$username" ] && [ -n "$password" ] && [ "$username" != "none" ]; then
         echo "Generating $output_file for user: $username"
-        # Use openssl to generate APR1 hash (compatible with nginx)
-        # Echo password to openssl to avoid prompts
+        # APR1 is a hash format nginx auth_basic reads.
         hash=$(echo "$password" | openssl passwd -apr1 -stdin)
         echo "${username}:${hash}" > "$output_file"
         chmod 644 "$output_file"
@@ -22,11 +19,10 @@ generate_htpasswd() {
     fi
 }
 
-# Generate htpasswd files for each auth endpoint
-# Main endpoint (/, /admin/, /api) - used in dev/test
+# HTTP_BASIC: / and the demi locations, dev/test only.
 generate_htpasswd "${USERNAME}" "${PASSWORD}" "/tmp/.htpasswd"
 
-# E-guide endpoint (/eguide) - used in prod only
+# HTTP_BASIC1: /eguide, prod only.
 generate_htpasswd "${USERNAME1}" "${PASSWORD1}" "/tmp/.htpasswd1"
 
 echo "HTTP Basic Auth setup complete"

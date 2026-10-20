@@ -1,8 +1,4 @@
-# ── Rate Limiting ─────────────────────────────────────────────────────────────
-# Zone definitions live here (http context — this file is included from nginx.conf
-# inside its http {} block via `include /etc/nginx/conf.d/*.conf`).
-# $binary_remote_addr is more compact than $remote_addr (4/16 bytes vs string).
-# Zone sizes: 10m ≈ 80k states — adequate for gov-scale traffic.
+# Zone definitions sit here because nginx.conf includes this file inside its http {} block.
 limit_req_zone  $binary_remote_addr zone=api_general:10m rate=30r/s;
 limit_req_zone  $binary_remote_addr zone=api_search:10m  rate=10r/s;
 limit_req_zone  $binary_remote_addr zone=analytics:5m    rate=20r/s;
@@ -14,7 +10,6 @@ limit_conn_status 429;
 limit_req_log_level  warn;
 limit_conn_log_level warn;
 
-# Ajax
 server {
   listen       8080;
   server_name  ${NGINX__AJAX__SERVER_NAME};
@@ -22,153 +17,71 @@ server {
   return 301 https://${NGINX__AJAX__REDIRECT};
 }
 
-#EPIC application server
 server {
   listen       8080 default_server;
   server_name  ${NGINX__EPIC__SERVER_NAME};
 
-  # Prevent Nginx from prepending scheme/host/port to redirects (prevents HTTP downgrade and port 8080 exposure behind TLS termination)
+  # Relative redirects only: behind TLS termination an absolute one would carry http:// and :8080.
   absolute_redirect off;
   port_in_redirect off;
 
   # Allows non-standard headers like SMGOV_USERGUID
   ignore_invalid_headers off;
 
-  # Limit concurrent TCP connections per IP across all locations in this server block
   limit_conn conn_per_ip 50;
 
-  # 172.16.0.0/12 is the entire addressable space in the cluster
-  #set_real_ip_from  172.51.0.0/22;
-  #set_real_ip_from  172.51.4.0/22;
-  #real_ip_header    X-Forwarded-For;
-
   location / {
-    # proxy all traffic to this URL,
-    # note the trailing slash strips out the /proxy path on
-    # the request to the upstream server
-
     proxy_pass ${NGINX__EPIC__PROXY__ROOT};
-
-    # Ensure HTTP get passed thru
     proxy_pass_request_headers on;
 
-    # STRIP THE BASIC-AUTH CREDENTIAL, exactly as `location = /demi-search/search` does. Once this
-    # upstream is Azure Front Door rather than an in-cluster Service, `proxy_pass_request_headers on`
-    # sends the dev/test shared credential — the one ${HTTP_BASIC} just validated — out of the
-    # cluster to Microsoft's edge on EVERY page request, where it lands in their access logs.
-    # Nothing upstream wants it: blob storage behind Front Door is anonymous, and the in-cluster
-    # Service never asked for it either.
-    #
-    # Harmless where basic auth is off (prod: `httpBasic.enabled: false`, so ${HTTP_BASIC} expands
-    # to nothing and there is no header to strip) and correct everywhere else.
+    # Strip the basic-auth credential, for the reason at `location = /demi-search/search`.
     proxy_set_header Authorization "";
 
-    # its helpful to cache these responses
     proxy_cache globalcache;
 
-    # ── EXTERNAL HTTPS UPSTREAM IN PROD AND TEST; IN-CLUSTER SERVICE IN DEV ────────────────────
-    # THE CUTOVER ALREADY HAPPENED — do not read this block as forward-looking. Since eao-nginx
-    # v2.7.14 `values-prod.yaml`, and now `values-test.yaml`, set NGINX__EPIC__PROXY__ROOT to an
-    # Azure Front Door endpoint, so every proxy_ssl_* directive below is LIVE in both: this is the
-    # block that serves every page of projects.eao.gov.bc.ca and test.projects.eao.gov.bc.ca, and
-    # it serves them over TLS.
-    # Only `values-dev.yaml` still points at http://eagle-public:8080, an in-cluster Service, and
-    # only there are these directives inert — they apply once the proxied scheme is https. So
-    # "inert" is now a DEV-only observation. On call in either other environment, treat everything
-    # below as load-bearing.
-
-    # SNI. nginx defaults proxy_ssl_server_name off, i.e. it opens https upstreams with no server
-    # name and the peer has to guess which certificate to serve — Front Door answers that with a
-    # *.azureedge.net certificate. It only appears to work today because proxy_ssl_verify is also
-    # off, so nobody checks the name it got back.
+    # Front Door needs SNI, and nginx defaults proxy_ssl_server_name off.
     proxy_ssl_server_name on;
 
-    # NEVER add `proxy_set_header Host $host` here. Measured against the prod Front Door endpoint:
-    #   Host: projects.eao.gov.bc.ca              → 421 Misdirected Request
-    #   Host: <endpoint>.azurefd.net              → 200
-    # Nothing sets Host in this block, so nginx sends its default $proxy_host — the upstream's own
-    # hostname, which is exactly what Front Door routes on. That stays correct until
-    # projects.eao.gov.bc.ca is attached to the endpoint as a custom domain. This is the reflex fix
-    # someone applies mid-incident, and it is a guaranteed outage.
+    # Never set `Host $host` here: Front Door answers 421. It routes on the default $proxy_host.
 
-    # Certificate verification: THESE THREE ARE A SET, all or none. Measured on nginx 1.27-alpine,
-    # the image prod runs: `proxy_ssl_verify on` at nginx's default proxy_ssl_verify_depth of 1
-    # returns 502 with `upstream SSL certificate verify error (19: self-signed certificate in
-    # certificate chain)`, because Front Door presents leaf + 2 intermediates + root. Depth 3
-    # returns 200. Deliberately left commented: turning verification on is its own change, to be
-    # made and tested after the upstream is actually https.
-    # proxy_ssl_verify on;
-    # proxy_ssl_trusted_certificate /etc/ssl/certs/ca-certificates.crt;
-    # proxy_ssl_verify_depth 3;
+    # TLS verify stays off. Turning it on needs proxy_ssl_trusted_certificate plus verify_depth 3,
+    # because the Front Door chain is 4 deep and the default depth 1 returns 502.
 
-    # DNS IS RESOLVED ONCE, AT CONFIG LOAD. There is no `resolver` anywhere in this file and
-    # proxy_pass holds a literal name, not a variable, so nginx never re-resolves. The Front Door
-    # hostname sits behind Azure Traffic Manager on a 10-second TTL. If that address moves, the
-    # failure mode is the WHOLE SITE 502ing — every page, not one endpoint — while /nginx_status
-    # and the readiness probe both stay green, because rproxy itself is perfectly healthy and
-    # nothing here notices. Recovery is `oc rollout restart deploy/rproxy`.
-    #
-    # Same root, second consequence: the Front Door hostname also publishes an AAAA record that is
-    # UNREACHABLE from this cluster (measured from an rproxy pod — IPv4 returns 200, IPv6 returns
-    # `Network unreachable`). nginx round-robins every address it resolved at startup, so expect
-    # `connect() to [2603:…]:443 failed (101: Network unreachable)` noise in the error log, each
-    # one retried to v4. Noise, not an outage.
-
-    # Deploy-time configurable
+    # No `resolver` in this file, so upstream names resolve once at load. If an upstream IP moves,
+    # it 502s while the probes stay green; fix with `oc rollout restart deploy/rproxy`.
     ${HTTP_BASIC}
   }
 
-  # Redirect SSD fact sheet
   location = /api/public/document/673fa39fe2d737002260aaef/download/Fact_Sheet_PRGT_Substantial-Start-Determination.pdf {
     return 301 https://www2.gov.bc.ca/assets/download/F3F5FA681ADD4912B19A8DE62CBB451E;
   }
 
-  # Redirect legacy /api/analytics path used by cached env.js (pre-v2.4.1). Internal re-route, so
-  # the bare /analytics block below is the only place that decides what that URL answers.
+  # Cached env.js still calls /api/analytics. Internal rewrite, so `location = /analytics` decides.
   location = /api/analytics {
     rewrite ^ /analytics last;
   }
 
-  # ── ANALYTICS: ONE UPSTREAM, THE APIM GATEWAY ──────────────────────────────────────────────
-  # `^~ /analytics/` is the eagle-analytics API — /events for ingest, /query and /dashboards for
-  # the staff screens — behind the APIM gateway in every environment. It is the only analytics
-  # upstream: penguin-analytics was uninstalled from the 6cdc9e namespaces on 2026-09-07, so the
-  # GC Notify webhook it served is terminated here with a 410 rather than proxied. The Engage copy
-  # of that webhook runs in its own namespace and never came through this proxy.
-  #
-  # `^~ /api/usage/` is the SAME gateway under a neutral prefix, and it is what a browser is meant
-  # to call. Ad blockers drop any request whose URL contains "analytics" before it leaves the page:
-  # POST /analytics/events returned ERR_BLOCKED_BY_CLIENT on eagle-admin test (2026-09-06). So the
-  # frontends send /api/usage/… and this file rewrites the prefix back to /analytics/… for the
-  # upstream, which is unchanged. Both spellings keep the analytics rate-limit zone.
+  # /api/usage/ is the same APIM gateway as /analytics/ under a neutral prefix, because ad blockers
+  # drop any URL containing "analytics". Browsers call /api/usage/.
 
-  # penguin-analytics retired 2026-09-07, and cached bundles may still POST here.
+  # The endpoint is gone, and cached bundles may still POST here.
   location = /analytics {
     return 410;
   }
 
-  # The GC Notify webhook penguin served. A longer prefix than `^~ /analytics/`, so it wins for this
-  # path and never reaches the gateway, which has no such route — and the caller's Authorization
-  # header never leaves the cluster.
+  # GC Notify webhook. A longer prefix than `^~ /analytics/`, so it never reaches the gateway and
+  # the caller's Authorization header never leaves the cluster.
   location ^~ /analytics/webhook/ {
     return 410;
   }
 
-  # The slash-less spelling, paired with the block above the way `location = /analytics` is paired
-  # with `^~ /analytics/`. Without it this one URL falls to `^~ /analytics/` and carries its
-  # Authorization header to the gateway.
+  # Without the slash-less spelling, this URL falls to `^~ /analytics/` and sends Authorization out.
   location = /analytics/webhook {
     return 410;
   }
 
-  # `^~` like the other external upstreams, so no regex location can take this prefix. ANALYTICS
-  # is an https host, so both traps at `location ^~ /eagle-search/` apply: the gateway needs SNI,
-  # and with no `resolver` here the name resolves ONCE at config load. Host is left to default to
-  # $proxy_host, the name APIM routes on. Timeouts are the sibling APIM ones: the gateway fronts a
-  # scale-to-zero Function, and a cold start answers well past 10s.
-  #
-  # NO Authorization strip here. The bearer on /analytics/query and /analytics/dashboards IS the
-  # authorization eagle-analytics enforces. Only anonymous ingest gets stripped — next block.
+  # No Authorization strip: the bearer on /query and /dashboards is the authorization. Timeouts
+  # cover the scale-to-zero Function behind the gateway, whose cold start runs past 10s.
   location ^~ /analytics/ {
     limit_req zone=analytics burst=30 nodelay;
     proxy_pass ${NGINX__EPIC__PROXY__ANALYTICS}/analytics/;
@@ -180,11 +93,7 @@ server {
     proxy_read_timeout    60s;
   }
 
-  # Anonymous event ingest — a longer prefix than `^~ /analytics/`, so it wins for this path alone.
-  # STRIP THE CREDENTIAL, for the reason at `location = /demi-search/search`: ingest needs no
-  # identity, eagle-admin attaches its Keycloak token to same-origin XHRs regardless, and in dev
-  # and test this upstream is outside the cluster — as is the shared basic-auth credential the
-  # browser keeps sending once the page is authed.
+  # Anonymous ingest: strips the credential, for the reason at `location = /demi-search/search`.
   location ^~ /analytics/events {
     limit_req zone=analytics burst=30 nodelay;
     proxy_pass ${NGINX__EPIC__PROXY__ANALYTICS}/analytics/events;
@@ -197,12 +106,8 @@ server {
     proxy_read_timeout    60s;
   }
 
-  # The browser-facing spelling of `^~ /analytics/`. proxy_pass carries a URI, so the matched
-  # prefix is replaced by it: /api/usage/events reaches the gateway as /analytics/events,
-  # /api/usage/health as /analytics/health. Every directive is copied from the block above rather
-  # than shared, because both spellings must behave identically while both are live.
-  # `^~` on a prefix longer than `/api` wins on prefix length alone, so this cannot fall through to
-  # `location /api` and no regex location is even tried — order in this file is irrelevant.
+  # Browser-facing spelling of `^~ /analytics/`: proxy_pass maps /api/usage/x to /analytics/x.
+  # `^~` on the longer prefix beats `location /api`, so order in this file does not matter.
   location ^~ /api/usage/ {
     limit_req zone=analytics burst=30 nodelay;
     proxy_pass ${NGINX__EPIC__PROXY__ANALYTICS}/analytics/;
@@ -214,8 +119,7 @@ server {
     proxy_read_timeout    60s;
   }
 
-  # Anonymous event ingest, mirroring `^~ /analytics/events`: same longer-prefix win, and the same
-  # credential strip, for the reason given there.
+  # Mirrors `^~ /analytics/events`, including the credential strip.
   location ^~ /api/usage/events {
     limit_req zone=analytics burst=30 nodelay;
     proxy_pass ${NGINX__EPIC__PROXY__ANALYTICS}/analytics/events;
@@ -228,16 +132,8 @@ server {
     proxy_read_timeout    60s;
   }
 
-  # Runtime configuration for the frontends, served by eagle-api from a Config document.
-  # Its own block rather than falling through to `location /api`, for two reasons:
-  #   - proxy_cache_use_stale: eagle-admin now fails to boot on a failed fetch, so a good config
-  #     must outlive a brief eagle-api outage. Failures are never cached — the controller sets
-  #     no-store on its 404 and 500.
-  #   - timeouts that SUM to under admin's own 5s AbortSignal (1s connect + 3s read = 4s worst
-  #     case), or nginx would still be waiting when the browser has already given up and shown
-  #     the error page — and use_stale's `timeout` condition could never fire in time to help.
-  # Deliberately NO limit_req: the alias this replaces had none, `location /api` uses a per-IP zone
-  # shared with every other API call on the page, and a 429 here now white-screens the admin console.
+  # 1s connect + 3s read stays under admin's 5s abort, so use_stale can still serve a good config.
+  # No limit_req: a 429 here white-screens the admin console.
   location = /api/config {
     proxy_pass ${NGINX__EPIC__PROXY__API};
     proxy_pass_request_headers on;
@@ -250,39 +146,8 @@ server {
     proxy_read_timeout    3s;
   }
 
-  # eagle-search (Azure AI Search) — the search backend for Project, Document and DocumentChunk.
-  #
-  # WHY PROXY IT INSTEAD OF LETTING THE BROWSER CALL AZURE. eagle-public's Content-Security-Policy
-  # sets `connect-src 'self' https://*.gov.bc.ca`, which blocks *.azurewebsites.net outright.
-  # It now comes from two different places: dev and test get it from the add_header baked into the
-  # eagle-public image (eagle-public/Dockerfile), prod gets it from an Azure Front Door rules-engine
-  # ModifyResponseHeader (eagle-public/azure/main.publicprod.bicep, applied by
-  # azure/modules/front-door.bicep). The two policies are not byte-identical — the Front Door one
-  # adds base-uri — but they carry the SAME connect-src, so the conclusion is unchanged in every
-  # environment: same-origin sidesteps the CSP, needs no CORS, and keeps the Azure hostname off the
-  # page. What changed is only the reason — prod's copy IS now a per-environment value, so
-  # "it is baked into the image and cannot vary" no longer holds there. Widening prod's connect-src
-  # instead of proxying is therefore possible now, and still the wrong trade: it puts the Azure
-  # hostname on the page and moves the call cross-origin.
-  #
-  # PATH REWRITE. Trailing slashes on both sides, so /eagle-search/search?… reaches the upstream as
-  # /api/search?…. eagle-public sends SEARCH_API_PATH=/eagle-search and appends `search?…` itself.
-  # That value comes from eagle-api's Mongo `Config` document, NOT from this chart's ConfigMap — see
-  # the SEARCH_API_PATH note in helm/rproxy/values-prod.yaml. The ConfigMap wording here predates
-  # that move and would send someone editing values files to flip a switch that is not there.
-  #
-  # NOT /search-api/ — that path existed here and was removed in d7dc62c, "remove /search-api direct
-  # Typesense exposure". Reusing the name would make that commit read as reverted.
-  #
-  # FIRST EXTERNAL HTTPS UPSTREAM IN THIS FILE. Two consequences:
-  #   - proxy_ssl_server_name is required; App Service needs SNI and nginx defaults it off.
-  #   - There is no `resolver` here, so nginx resolves this hostname ONCE, at config load. Every
-  #     other upstream is a ClusterIP Service, where that has never mattered. If an App Service IP
-  #     moves, this location 502s while the name resolves fine everywhere else; the fix is
-  #     `oc rollout restart deploy/rproxy`.
-  #
-  # No proxy_cache, unlike the Typesense blocks below: eagle-search sends no cache headers, so it
-  # would be inert today and an ACL leak the day this endpoint learns about authentication.
+  # Same-origin because eagle-public's CSP connect-src blocks *.azurewebsites.net. Trailing slashes
+  # map /eagle-search/x to /api/x. No proxy_cache: it would leak across users once auth is added.
   location ^~ /eagle-search/ {
     limit_req zone=api_search burst=20 nodelay;
     proxy_pass ${NGINX__EPIC__PROXY__SEARCH}/api/;
@@ -293,73 +158,25 @@ server {
     proxy_read_timeout    60s;
   }
 
-  # demi-api search — INTERIM SAME-ORIGIN TRANSPORT, DELETE THIS BLOCK WHEN demi.eao.gov.bc.ca
-  # RESOLVES. A BC Gov DNS request for that name is outstanding. The moment it lands,
-  # SEARCH_API_PATH becomes an absolute https://demi.eao.gov.bc.ca/api URL that the browser can
-  # call directly — it matches `connect-src 'self' https://*.gov.bc.ca` where
-  # demi-api-test.azurewebsites.net does not — and this block has nothing left to do. It buys
-  # exactly one thing: a gov.bc.ca-shaped origin for the one call, while DNS is pending.
-  #
-  # `location =`, AN EXACT MATCH, NOT `^~ /demi-search/`. That is the security control here, not a
-  # micro-optimisation. Several eagle-public reads hang off the search base now — keyword search
-  # (eagle-public/src/app/api/api.ts, searchBaseFor() for the AZURE_DATASETS, whose query string is
-  # always built as `search?dataset=…`), the bulk-download job calls, and, once CONFIG_PATH points
-  # here, the runtime config fetch. Each gets its own location block spelling out the exact URL
-  # demi-api is asked to answer. This one carries the search URL and nothing else.
-  # A prefix match would publish demi-api's WHOLE route table anonymously on a gov.bc.ca origin:
-  # GET /projects and GET /documents both accept pageSize up to 1000 (eagle-demi
-  # src/controllers/nosql/{project,document}.js clamp there), plus /documents/:id/download,
-  # /boundaries and the /api-docs swagger UI. demi-api also mounts its router at BOTH '/api' and
-  # '/' (eagle-demi src/app.js), so no second path segment is protecting anything on its side
-  # either. A URL that has to work gets its own location, as the two below did — never relax this
-  # one into a prefix over the base.
-  #
-  # Both App Service traps that `location ^~ /eagle-search/` documents above apply here verbatim,
-  # for the same reason (an https upstream that is not a ClusterIP Service): proxy_ssl_server_name
-  # is required because App Service needs SNI and nginx defaults it off, and with no `resolver` in
-  # this file the hostname is resolved ONCE at config load — an App Service IP move 502s this one
-  # location while every other upstream stays green, and the fix is
-  # `oc rollout restart deploy/rproxy`.
-  #
-  # SEARCH_API_PATH is served from eagle-api's Mongo `Config` document, NOT from this chart's
-  # ConfigMap — see the SEARCH_API_PATH note in helm/rproxy/values-prod.yaml before going looking
-  # for a values key to flip.
+  # Exact match is the security control: a prefix would publish demi-api's whole route table
+  # anonymously. A URL that has to work gets its own location; never relax this into a prefix.
   location = /demi-search/search {
-    # Same treatment `/lib` got when its block was deleted, and for the same reason: a location
-    # that carries no ${HTTP_BASIC} is anonymously reachable in dev and test while every page
-    # around it is behind basic auth. eagle-public sends the credentials on this XHR anyway —
-    # it is same-origin, and the user has already authenticated to load the page — so this costs
-    # the app nothing and closes the hole. Prod is unaffected: httpBasic.enabled is false there
-    # and the directive expands to nothing.
-    #
-    # NOT retrofitted to `location ^~ /eagle-search/` above, which has the same gap today. That
-    # one is live and something other than a browser may be calling it; tightening it belongs in
-    # its own change with its own verification, not smuggled into this one.
+    # HTTP_BASIC so this location is not anonymous in dev and test while the pages around it are.
     ${HTTP_BASIC}
     limit_req zone=api_search burst=20 nodelay;
     proxy_pass ${NGINX__EPIC__PROXY__DEMI}/api/search;
     proxy_ssl_server_name on;
     proxy_pass_request_headers on;
-    # STRIP THE BASIC-AUTH CREDENTIAL. ${HTTP_BASIC} above makes the browser attach an
-    # Authorization header to this XHR, and proxy_pass_request_headers would then forward the
-    # shared dev/test credential OUT of the cluster to an Azure App Service. Measured against an
-    # instrumented upstream: every proxied request arrived with `authorization_header=YES`.
-    #
-    # It also fired demi-api's forged-credential path on every legitimate search — /api/search is
-    # mounted on passiveAuthMiddleware, which logs a warning for a credential it rejects, and an
-    # nginx htpasswd string is not a token it can accept. Anonymous is the correct posture for this
-    # route; the basic-auth gate is enforced HERE, before proxy_pass, and stripping the header
-    # afterwards does not weaken it.
+    # HTTP_BASIC makes the browser send the shared dev/test credential, and forwarding headers would
+    # carry it out of the cluster. The gate is still enforced here, before proxy_pass.
     proxy_set_header Authorization "";
     proxy_connect_timeout 10s;
     proxy_send_timeout    60s;
     proxy_read_timeout    60s;
   }
 
-  # DEMI bulk-download job API: POST creates a job, GET /<id> polls it. `^~` matches the sibling
-  # /s/ and /eagle-search/ blocks and keeps a future regex location from stealing the path.
-  # X-Forwarded-For passes through as the router set it. Appending here would add the router
-  # hop, not the browser; which hop to trust is demi's decision (TRUSTED_PROXY_IPS there).
+  # X-Forwarded-For passes through as the router set it. Which hop to trust is demi's decision
+  # (TRUSTED_PROXY_IPS there); appending here would add the router hop, not the browser.
   location ^~ /demi-search/bulk-downloads {
     ${HTTP_BASIC}
     limit_req zone=api_search burst=20 nodelay;
@@ -372,33 +189,15 @@ server {
     proxy_read_timeout    60s;
   }
 
-  # eagle-public's runtime config, served by demi-api rather than eagle-api's Mongo `Config`
-  # document. Exact match for the reason at `location = /demi-search/search` above: one URL, never
-  # a prefix over demi-api's route table.
-  #
-  # Timeouts and cache directives copied from `location = /api/config`, adjusted for a slower
-  # upstream: the DEMI Function runs on Flex Consumption, and a cold start takes longer than 3s.
-  # eagle-public's `react` line aborts this fetch at 12s, so nginx still has to give up first
-  # (1s connect + 10s read = 11s worst case). 200 bodies are cached for 1 minute
-  # so a good config outlives a brief demi-api outage via proxy_cache_use_stale. 503 is `no-store`
-  # upstream and never cached — demi-api answers 503 with `Cache-Control: no-store` while the public
-  # config document is unseeded, and eagle-public falls back to /api/config when this returns
-  # anything but a whole payload. A re-seed shows within a minute.
-  #
-  # DARK ON ARRIVAL: eagle-public ships CONFIG_PATH empty, so nothing calls this until that flips
-  # per environment. An unanswered route here is expected, not a fault.
-  #
-  # limit_req, unlike `location = /api/config`: a 429 here is survivable because of that fallback,
-  # and this upstream is metered APIM rather than a Service in the namespace.
+  # 1s connect + 10s read stays under the react line's 12s abort. limit_req is safe here because
+  # eagle-public falls back to /api/config when this fails.
   location = /demi-search/config {
     ${HTTP_BASIC}
     limit_req zone=api_search burst=20 nodelay;
     proxy_pass ${NGINX__EPIC__PROXY__DEMI}/api/config/public;
     proxy_ssl_server_name on;
     proxy_pass_request_headers on;
-    # STRIP THE BASIC-AUTH CREDENTIAL, for the reason spelled out at `location = /demi-search/search`:
-    # ${HTTP_BASIC} makes the browser attach the shared dev/test credential to this XHR, and
-    # proxy_pass_request_headers would forward it out of the cluster. The gate is enforced here.
+    # Strip the credential, for the reason at `location = /demi-search/search`.
     proxy_set_header Authorization "";
 
     proxy_cache globalcache;
@@ -410,7 +209,6 @@ server {
     proxy_read_timeout    10s;
   }
 
-  # DEMI site access gate (password check). POST only, no caching.
   location = /demi-search/gate {
     ${HTTP_BASIC}
     limit_req zone=api_search burst=20 nodelay;
@@ -424,21 +222,8 @@ server {
     proxy_read_timeout    60s;
   }
 
-  # Recent public uploads for eagle-public. Exact match for the reason spelled out at
-  # `location = /demi-search/search`: one URL, never a prefix over demi-api's document routes.
-  # ?limit=N (1-10, validated upstream) rides along — nginx appends the client's query string to the
-  # proxy_pass URI on its own, so no variable is needed here and the DEMI hostname still resolves
-  # once at config load like every other upstream in this file.
-  #
-  # Cache directives copied from `location = /demi-search/config`, same globalcache zone and the same
-  # slow-upstream timeouts (Flex Consumption cold start). The default cache key
-  # ($scheme$proxy_host$request_uri) carries the query string, so limit=3 and limit=10 are separate
-  # entries. demi-api answers `Cache-Control: public, max-age=300`, which decides real freshness;
-  # proxy_cache_valid below is only the fallback if that header ever goes away.
-  #
-  # The response varies on X-Api-Key, which proxy_pass_request_headers forwards, so a keyed request
-  # neither reads nor fills the anonymous entry. Authorization is not in that condition because it is
-  # emptied below — demi-api only ever sees the anonymous variant of this route.
+  # The default cache key carries the query string, so each ?limit=N caches apart. Upstream
+  # Cache-Control decides freshness; proxy_cache_valid is only the fallback.
   location = /demi-search/documents/recent-uploads {
     ${HTTP_BASIC}
     limit_req zone=api_search burst=20 nodelay;
@@ -446,9 +231,7 @@ server {
     proxy_pass ${NGINX__EPIC__PROXY__DEMI}/api/documents/recent-uploads;
     proxy_ssl_server_name on;
     proxy_pass_request_headers on;
-    # STRIP THE BASIC-AUTH CREDENTIAL, for the reason spelled out at `location = /demi-search/search`:
-    # ${HTTP_BASIC} makes the browser attach the shared dev/test credential to this XHR, and
-    # proxy_pass_request_headers would forward it out of the cluster.
+    # Strip the credential, for the reason at `location = /demi-search/search`.
     proxy_set_header Authorization "";
 
     proxy_cache globalcache;
@@ -462,7 +245,6 @@ server {
     proxy_read_timeout    10s;
   }
 
-  # DEMI document download by ObjectId. GET only, no caching; query string (redirect=1) passes through.
   location ~ "^/demi-search/documents/([0-9a-f]{24})/download$" {
     ${HTTP_BASIC}
     limit_req zone=api_general burst=10 nodelay;
@@ -477,20 +259,17 @@ server {
     proxy_read_timeout    30s;
   }
 
-  # Terminator for every /demi-search/documents/... path that is NOT the download regex above. Plain
-  # prefix, no `^~`, so nginx still tries the regex first — only non-matches land here, dead instead of
-  # falling to `location /` and proxying back to Front Door, which routes here and loops to 504.
+  # Terminator: plain prefix, so the regex above is tried first. Non-matches 404 here instead of
+  # falling to `location /` and looping through Front Door to a 504.
   location /demi-search/documents/ {
     return 404;
   }
 
-  # Short links. demi-api owns the code -> URL map; this block only carries /s/ to it.
   location ^~ /s/ {
     ${HTTP_BASIC}
     limit_req zone=api_general burst=10 nodelay;
-    # The URI keeps the /s/ prefix (rewritten to /api/s/, where APIM mounts demi-api). Never a bare
-    # host or /api/: that maps /s/projects onto demi-api's /projects, publishing its whole route
-    # table anonymously on a gov.bc.ca origin — the hazard spelled out at `location = /demi-search/search`.
+    # Keep the /s/ prefix in the URI. A bare host or /api/ would map /s/projects onto demi-api's
+    # /projects and publish its whole route table.
     proxy_pass ${NGINX__EPIC__PROXY__DEMI}/api/s/;
     proxy_ssl_server_name on;
     proxy_pass_request_headers on;
@@ -500,14 +279,8 @@ server {
     proxy_read_timeout    30s;
   }
 
-  # Project phases for eagle-public's assessment rail: ONE demi-api document per Eagle id. The regex
-  # admits exactly /demi-projects/<ObjectId>, so demi-api's list route, /documents, its downloads and
-  # its swagger stay unpublished — the hazard spelled out at `location = /demi-search/search`.
-  #
-  # rewrite + a variable-free proxy_pass, the same shape as the /api/v2/projects block below: the id
-  # goes into the URI, never into the upstream, so demi-api resolves once at config load like every
-  # other upstream here. Both regexes are QUOTED — nginx reads an unquoted `{` as the start of a
-  # block, so a bare `{24}` fails config parse with `unknown directive "24}$"`.
+  # Regexes are quoted because a bare `{` opens a block. The id goes in the URI, not the upstream,
+  # so the name resolves once at load.
   location ~ "^/demi-projects/[0-9a-f]{24}$" {
     ${HTTP_BASIC}
     limit_req zone=api_general burst=10 nodelay;
@@ -522,14 +295,13 @@ server {
     proxy_read_timeout    30s;
   }
 
-  # Terminator for every /demi-projects/... path that is NOT an ObjectId. Plain prefix, no `^~`, so
-  # nginx still tries the regex above first — only non-matches land here, dead instead of falling to
-  # `location /` and proxying back to Front Door, which routes /demi-projects/* here and loops to 504.
+  # Terminator: plain prefix, so the regex above is tried first. Non-matches 404 here instead of
+  # falling to `location /` and looping through Front Door to a 504.
   location /demi-projects/ {
     return 404;
   }
 
-  # Legacy v2 projects routing rewrite to current /api/public/project
+  # v2 projects routes rewrite to /api/public/project.
   location ~ ^/api/v2/projects/(.+)$ {
     rewrite ^/api/v2/projects/(.+)$ /api/public/project/$1 break;
     proxy_pass ${NGINX__EPIC__PROXY__API};
@@ -557,26 +329,17 @@ server {
   }
 
   location /api {
-    # proxy all traffic to this URL,
-    # note the trailing slash strips out the /proxy path on
-    # the request to the upstream server
-
     proxy_pass ${NGINX__EPIC__PROXY__API};
-
-    # Ensure HTTP get passed thru
     proxy_pass_request_headers on;
     limit_req zone=api_general burst=50 nodelay;
 
-    # Cache public (unauthenticated) API responses only.
-    # Authenticated requests bypass cache — admin users need fresh data
-    # after mutations (delete, publish, etc.).
+    # Cache anonymous responses only; admins need fresh data after a write.
     proxy_cache globalcache;
     proxy_cache_bypass $http_authorization;
     proxy_no_cache $http_authorization;
 
-    # Explicit timeouts — must be lower than HAProxy route timeout (180s)
-    # so nginx fails first with a clean error rather than a generic 504.
-    # 120s gives headroom for large document uploads and slow aggregations.
+    # Below the Route's haproxy timeout (values.yaml `route.timeout`), so nginx fails first with a
+    # clean error. 120s covers large uploads and slow aggregations.
     proxy_connect_timeout 10s;
     proxy_send_timeout    120s;
     proxy_read_timeout    120s;
@@ -602,51 +365,20 @@ server {
     proxy_cache globalcache;
   }
 
-  # For e-guide service
   location /eguide {
     proxy_pass ${NGINX__EPIC__PROXY__EGUIDE};
-
-    # Ensure HTTP get passed thru
     proxy_pass_request_headers on;
-
-    # its helpful to cache these responses
     proxy_cache globalcache;
 
     ${HTTP_BASIC1}
   }
 
-#  location /.well-known/acme-challenge {
-#    proxy_pass ${NGINX__EPIC__PROXY__CERTBOT};
-#
-#    # Ensure HTTP get passed thru
-#    proxy_pass_request_headers on;
-#
-#    # its helpful to cache these responses
-#    proxy_cache globalcache;
-#  }
-
-  # `location /public` and `location /lib` used to sit here, each with its own proxy_pass. Both are
-  # gone: /, /public and /lib all returned a byte-identical Angular shell (md5 0f0e86926b29,
-  # measured on prod), because none of them is distinct content — they fall through to index.html.
-  # They now reach `location /` instead — same upstream, same URI, same response body.
-  #
-  # ONE BEHAVIOUR CHANGE, in dev and test only: `/lib` was anonymously reachable because the old
-  # block carried no ${HTTP_BASIC}, and it now inherits `location /`'s basic auth. Measured on
-  # dev values — before: / 401, /public 401, /lib 200; after: all three 401, and all three 200
-  # with credentials. Prod is unaffected: httpBasic is disabled there, so all three were and
-  # remain 200 anonymously. This tightens dev/test rather than widening anything.
-
-  # For status of ngnix service
   location /nginx_status {
-    # Enable Nginx stats
     stub_status on;
-    # Allow access from Kubernetes pods (10.0.0.0/8 covers OpenShift SDN)
+    # 10.0.0.0/8 covers the OpenShift SDN, where the probes come from.
     allow 10.0.0.0/8;
-    # Allow localhost
     allow 127.0.0.1;
-    # Other requests should be denied
     deny all;
-    # No need to log this request, its just noise
     access_log off;
   }
 

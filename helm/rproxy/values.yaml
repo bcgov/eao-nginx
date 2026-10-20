@@ -1,13 +1,8 @@
-# Default values for rproxy Helm chart
-# This is a YAML-formatted file.
-# Declare variables to be passed into your templates.
-
 replicaCount: 2
 
 image:
   repository: image-registry.openshift-image-registry.svc:5000/6cdc9e-tools/rproxy
   pullPolicy: Always
-  # Overrides the image tag whose default is the chart appVersion.
   tag: "latest"
   name: "rproxy"
   namespace: "6cdc9e-tools"
@@ -15,19 +10,16 @@ image:
 nameOverride: ""
 fullnameOverride: "rproxy"
 
-# Pod labels for network policies and service selectors
+# NetworkPolicy and Service selectors match these labels.
 podLabels:
   role: "rproxy-eagle-epic"
   app: "eagle-epic"
 
-# nginx proxy configuration
 nginx:
-  # Ajax redirect (legacy)
   ajax:
     serverName: "ajax.projects.eao.gov.bc.ca"
     redirect: "projects.eao.gov.bc.ca/p/ajax-mine/detail"
   
-  # EPIC server configuration
   epic:
     serverName: "localhost"
     proxy:
@@ -36,36 +28,28 @@ nginx:
       admin: "http://eagle-admin:8080"
       public: "http://eagle-public:8080"
       eguide: "http://eagle-api:3000"
-      # Analytics gateway host, per environment. Empty here on purpose: the gateway is an Azure
-      # APIM name, not an in-cluster Service, and the deployment substitutes an unreachable
-      # sentinel so nginx still starts where no value is set.
+      # Azure APIM host set per environment; empty renders the deployment's unreachable sentinel.
       analytics: ""
       certbot: "http://certbot:8080"
-      # eagle-search, per environment. Empty here on purpose: only prod still has a search service
-      # (dev torn down 2026-08-11, test retired 2026-08-25), and the deployment substitutes an
-      # unreachable sentinel so nginx still starts everywhere else.
+      # No environment runs eagle-search; empty renders the deployment's unreachable sentinel.
       search: ""
-    # proxyDeployConfig removed — timeouts are now hardcoded in server.conf.tmpl
 
-# HTTP Basic Authentication settings
 httpBasic:
-  # Main endpoint auth (leave empty to disable)
+  # HTTP_BASIC: the directive applies only when enabled is true.
   enabled: false
   directive: ""
   username: ""
   password: ""
   
-  # E-guide endpoint auth (HTTP_BASIC1)
-
+  # HTTP_BASIC1 and HTTP_BASIC2 take the directive whatever enabled says.
   eguide:
     enabled: false
     directive: ""
     username: ""
     password: ""
 
-  # Public endpoint auth (HTTP_BASIC2). No /public block exists in server.conf.tmpl any more,
-  # but released images v2.7.7-v2.7.12 still render one — keep these until no deployable
-  # tag does.
+  # HTTP_BASIC2: the template has no /public block, but tags v2.7.7-v2.7.12 render one and
+  # pr.yaml's chart-vs-tags guard needs every variable a tag at or above MIN_TAG expands.
   public:
     enabled: false
     directive: ""
@@ -81,17 +65,15 @@ route:
   enabled: true
   host: ""
   path: /
-  timeout: "360s"  # HAProxy route timeout — must exceed the longest nginx proxy_read_timeout (120s for /api)
+  timeout: "360s"  # must exceed the longest nginx proxy_read_timeout (120s, /api)
   tls:
     enabled: true
     termination: edge
     insecureEdgeTerminationPolicy: Redirect
-  # Post-install/post-upgrade hook to patch HAProxy rate-limiting annotations onto
-  # the pre-existing Route (which is not managed by Helm when route.enabled=false).
+  # Hook that patches HAProxy rate-limit annotations onto a Route Helm does not manage.
   patchAnnotations:
     enabled: false
-    # routeName: override if the Route name differs from the chart fullname (rproxy)
-    routeName: ""
+    routeName: ""  # empty = chart fullname
     image: "bitnami/kubectl:1.30"
 
 resources:
@@ -128,8 +110,8 @@ affinity: {}
 
 podAnnotations: {}
 
-# Application configuration served at /api/config
-# These are defaults - override in values-{env}.yaml
+# Rendered into the rproxy-config ConfigMap. Only images below v2.7.11 serve it at /api/config;
+# newer ones proxy that path to eagle-api.
 config:
   environment: "local"
   bannerColour: ""
@@ -145,8 +127,7 @@ config:
   survey:
     url: null
     showBanner: false
-  # Present so the chart renders from values.yaml alone. `| default ""` in the template does not
-  # save it: `.Values.config.engage.apiUrl` dereferences a nil `engage` first, so `helm lint`
-  # (which uses only this file) failed outright.
+  # Needed for `helm lint` on this file alone: `| default ""` cannot save the nil `engage`
+  # dereference in `.Values.config.engage.apiUrl`.
   engage:
     apiUrl: ""

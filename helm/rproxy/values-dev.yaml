@@ -1,4 +1,3 @@
-# Development environment values for rproxy
 replicaCount: 1
 
 image:
@@ -8,24 +7,21 @@ nginx:
   epic:
     serverName: "eagle-dev.apps.silver.devops.gov.bc.ca"
     proxy:
-      # No dev Front Door; dev serves the test static site. The eagle-public Service is gone from 6cdc9e-dev.
+      # No dev Front Door or eagle-public Service: dev serves the test static site.
       root: "https://eagle-public-test-dbg8ghh8gjd0bscx.a02.azurefd.net"
       api: "http://eagle-api:3000"
       admin: "http://eagle-admin:8080"
       public: "http://eagle-public:8080"
       eguide: "http://eagle-api:3000"
-      # The APIM gateway in front of the analytics API, and the only analytics upstream. Dev shares
-      # the test estate — there is no dev APIM. Bare host, same shape as `demi:`: each location adds
-      # its own path. Serves everything under /analytics/.
+      # Test APIM (there is no dev APIM). Bare host: each /analytics location adds its own path.
       analytics: "https://demi-apim-test.azure-api.net"
       certbot: "http://certbot:8080"
-      # No eagle-search route: the Azure dev estate was torn down 2026-08-11 (staging lives in
-      # c4b0a8-test). Dev clients fall back to eagle-api for search — the documented rollback.
+      # No search or demi key: those locations get the deployment's sentinel and return 502.
 
 httpBasic:
   enabled: false  # replaced by the ACCESS_GATE curtain in eagle-public and eagle-admin
   directive: "auth_basic \"Restricted Content\"; auth_basic_user_file /tmp/.htpasswd;"
-  # Credentials injected via GitHub secrets - do NOT hardcode
+  # Set from GitHub secrets at deploy time; never commit a value.
   username: ""
   password: ""
   
@@ -36,9 +32,7 @@ httpBasic:
     username: ""
     password: ""
 
-  # Public endpoint auth (HTTP_BASIC2). No /public block exists in server.conf.tmpl any more,
-  # but released images v2.7.7-v2.7.12 still render one — keep these until no deployable
-  # tag does.
+  # HTTP_BASIC2: older tags still render /public; see values.yaml.
   public:
     enabled: true
     directive: "auth_basic \"Restricted Content\"; auth_basic_user_file /tmp/.htpasswd2;"
@@ -46,7 +40,7 @@ httpBasic:
     password: ""
 
 route:
-  enabled: false  # Route is managed by eagle-api chart, matching test and prod
+  enabled: false  # the dev Route to rproxy belongs to the eagle-public Helm release
   host: eagle-dev.apps.silver.devops.gov.bc.ca
 
 resources:
@@ -57,15 +51,13 @@ resources:
     cpu: 30m
     memory: 25Mi
 
-# Application configuration served at /api/config
 config:
   environment: "dev"
   bannerColour: "red"
   logLevel: 0
   apiLocation: "https://eagle-dev.apps.silver.devops.gov.bc.ca"
   apiPath: "/api"
-  # searchApiPath deliberately absent: empty means eagle-api serves Project/Document/
-  # DocumentChunk search. The Azure dev search service is gone (2026-08-11 teardown).
+  # searchApiPath stays absent, as in test and prod.
   adminPath: "/admin/"
   keycloak:
     clientId: "eagle-api-console"

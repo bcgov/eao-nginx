@@ -1,4 +1,3 @@
-# Test environment values for rproxy
 replicaCount: 0 # rproxy retired; keep 0
 
 image:
@@ -8,41 +7,24 @@ nginx:
   epic:
     serverName: "epic-6cdc9e-test.apps.silver.devops.gov.bc.ca test.projects.eao.gov.bc.ca"
     proxy:
-      # AZURE HOSTING, mirroring prod since eao-nginx v2.7.14. The Angular bundle is served from
-      # Storage `$web` behind Front Door; rproxy stays the edge, so `/api`, `/admin/`, `/analytics`,
-      # `/eguide`, `/demi-search` and `/demi-projects` remain its own locations and the app
-      # stays same-origin. Published by eagle-public's `Deploy eagle-public to Azure staging`
-      # workflow, which must run for the SAME TAG as `Deploy to Test` or the two platforms serve
-      # different builds behind one hostname.
-      #
-      # READ THIS HOSTNAME OFF THE DEPLOYMENT, never compose it: Azure assigns both the hash and the
-      # zone (`a02` here, not the documented `z01`), and a wrong zone still resolves — it returns 404
-      # on every page while `/nginx_status` and the readiness probe stay green.
-      #
-      # Rollback is `oc set env deploy/rproxy NGINX__EPIC__PROXY__ROOT=http://eagle-public:8080
-      # -n 6cdc9e-test`, which is why deploy/eagle-public stays running with endpoints.
+      # Front Door endpoint: read it back from Azure, never compose it. Azure picks the zone (a02);
+      # a wrong one still resolves and 404s every page while the probes stay green.
       root: "https://eagle-public-test-dbg8ghh8gjd0bscx.a02.azurefd.net"
       api: "http://eagle-api:3000"
       admin: "http://eagle-admin:8080"
       public: "http://eagle-public:8080"
       eguide: "http://eagle-api:3000"
-      # The APIM gateway in front of the analytics API, and the only analytics upstream. Bare host,
-      # same shape as `demi:` below: each location adds its own path. Serves everything under
-      # /analytics/.
+      # Bare host: each /analytics location adds its own path.
       analytics: "https://demi-apim-test.azure-api.net"
       certbot: "http://certbot:8080"
-      # No eagle-search route: eagle-search-api-test retired 2026-08-25; test search is demi-api
-      # via /demi-search. The deployment renders the sentinel, as in dev.
-      # demi-api on Azure. INTERIM, delete with `location = /demi-search/search` once
-      # demi.eao.gov.bc.ca resolves. Bare host: each location adds its own /api/... path.
-      # Three /demi-search locations ride this host: search, bulk-downloads, and config —
-      # eagle-public's runtime config, fetched at boot once its CONFIG_PATH points here.
+      # No search key: search goes to demi-api via /demi-search. Bare host: each location adds
+      # its own /api/... path.
       demi: "https://demi-apim-test.azure-api.net"
 
 httpBasic:
   enabled: false  # replaced by the ACCESS_GATE curtain in eagle-public and eagle-admin
   directive: "auth_basic \"Restricted Content\"; auth_basic_user_file /tmp/.htpasswd;"
-  # Credentials injected via GitHub secrets - do NOT hardcode
+  # Set from GitHub secrets at deploy time; never commit a value.
   username: ""
   password: ""
   
@@ -53,9 +35,7 @@ httpBasic:
     username: ""
     password: ""
 
-  # Public endpoint auth (HTTP_BASIC2). No /public block exists in server.conf.tmpl any more,
-  # but released images v2.7.7-v2.7.12 still render one — keep these until no deployable
-  # tag does.
+  # HTTP_BASIC2: older tags still render /public; see values.yaml.
   public:
     enabled: true
     directive: "auth_basic \"Restricted Content\"; auth_basic_user_file /tmp/.htpasswd2;"
@@ -63,7 +43,7 @@ httpBasic:
     password: ""
 
 route:
-  enabled: false  # Route already exists, managed separately
+  enabled: false  # test has no Route to rproxy
   host: eagle-test.apps.silver.devops.gov.bc.ca
 
 resources:
@@ -74,42 +54,15 @@ resources:
     cpu: 30m
     memory: 25Mi
 
-# Application configuration served at /api/config — INERT ON THIS CHART VERSION, kept for rollback.
-#
-# Nothing in conf.d/ or nginx.conf reads config.json any more. It is rendered by
-# templates/configmap.yaml and mounted by templates/deployment.yaml, and then never served: from
-# rproxy v2.7.11 `location = /api/config` proxies to eagle-api, which answers from Mongo. So on the
-# image test runs, EVERY key below is dead, not just the absent searchApiPath.
-#
-# PROD IS NO LONGER THE EXCEPTION. That was written when prod ran v2.7.10, whose baked-in template
-# still served the mounted file, which made values-prod.yaml's copy load-bearing. Prod has run
-# v2.7.12 since 2026-08-20 and the /api/config move landed in v2.7.11, so that copy is inert too and
-# no environment reads config.json any more.
-#
-# The block stays for a different reason now: ROLLBACK. Every released tag up to v2.7.10 bakes a
-# template that serves the mounted file, so deleting this — and the volume, the mount and
-# configmap.yaml — would make a rollback that far 404 /api/config and white-screen eagle-admin. The
-# templates are shared, so it cannot be deleted for one environment only either. Delete it once no
-# deployable tag is below v2.7.11, not before.
+# Inert on v2.7.11+ images (see values.yaml). The block, volume and configmap.yaml stay so a
+# rollback below v2.7.11 still serves /api/config; the templates are shared, so all envs keep it.
 config:
   environment: "test"
   bannerColour: "orange"
   logLevel: 0
   apiLocation: "https://eagle-test.apps.silver.devops.gov.bc.ca"
   apiPath: "/api"
-  # searchApiPath: DELIBERATELY ABSENT, as in values-prod.yaml — do not re-add it.
-  #
-  # From eagle-api v2.10.63 and rproxy v2.7.11, `location = /api/config` proxies to eagle-api
-  # (conf.d/server.conf.tmpl), which serves the payload from the Mongo `Config` document. Both
-  # preconditions have held in test since 2026-08-17, so this key reached nobody: the ConfigMap said
-  # "/eagle-search" while /api/config served eagle-api's own keys, and for weeks the live value there
-  # was "" — test search fell back to eagle-api's Mongo search with this file claiming otherwise.
-  # It has since been set: as of 2026-08-19 test's /api/config returns SEARCH_API_PATH
-  # "/eagle-search". Neither value was ever this file's to state.
-  #
-  # The live switch and its rollback are one Mongo field, no rollout either way:
-  #   db.epic.updateOne({ _schemaName: 'Config' }, { $set: { SEARCH_API_PATH: '/eagle-search' } })
-  #   db.epic.updateOne({ _schemaName: 'Config' }, { $set: { SEARCH_API_PATH: '' } })
+  # searchApiPath stays absent: the live value is SEARCH_API_PATH in eagle-api's Mongo Config.
   adminPath: "/admin/"
   keycloak:
     clientId: "eagle-api-console"

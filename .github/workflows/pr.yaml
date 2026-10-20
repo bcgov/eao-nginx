@@ -17,13 +17,11 @@ jobs:
 
       - name: Validate nginx config template
         run: |
-          # Check server.conf.tmpl exists
           if [ ! -f conf.d/server.conf.tmpl ]; then
             echo "Error: conf.d/server.conf.tmpl not found"
             exit 1
           fi
           
-          # Check for required variables in template
           REQUIRED_VARS=(
             "NGINX__EPIC__PROXY__ROOT"
             "NGINX__EPIC__PROXY__API"
@@ -38,25 +36,19 @@ jobs:
             fi
           done
 
-          # THE CREDENTIAL STRIP ON /demi-projects, ASSERTED FROM THE TEMPLATE ITSELF.
-          # `proxy_set_header Authorization "";` is literal, not a ${VAR} envsubst expands, so the
-          # raw template already shows what ships — no render needed. Extract only the
-          # /demi-projects location block, open to its own closing brace, so a strip that exists
-          # elsewhere in the file cannot hide its absence here.
+          # Authorization strip on /demi-projects. The directive is literal, so the raw template is what
+          # ships; only that block is read, so a strip elsewhere cannot hide a missing one.
           demi_projects_block=$(awk '/^  location ~ "\^\/demi-projects/{f=1} f{print} f && /^  \}/{exit}' conf.d/server.conf.tmpl)
           echo "$demi_projects_block" | grep -qF 'proxy_set_header Authorization "";' \
             || { echo "Error: /demi-projects location block is missing proxy_set_header Authorization \"\";"; exit 1; }
 
-          # THE 404 TERMINATOR. Front Door forwards every /demi-projects/* to rproxy; the regex
-          # above only matches an ObjectId, so any other such path would fall through to `location /`,
-          # which proxies back to Front Door and loops until a 504. Must stay a plain prefix (no
-          # `^~`), so it terminates non-ObjectId paths without shadowing the regex above.
+          # Front Door sends every /demi-projects/* here; a non-ObjectId path that falls to `location /`
+          # loops back to Front Door until a 504. Plain prefix, no `^~`, so the ObjectId regex still wins.
           grep -qE '^  location /demi-projects/ \{' conf.d/server.conf.tmpl \
             || { echo "Error: /demi-projects/ terminator location is missing from server.conf.tmpl"; exit 1; }
 
-          # THE CREDENTIAL STRIP ON /demi-search/config, extracted and asserted exactly as
-          # /demi-projects above is. eagle-public boots off this response, so a forwarded dev/test
-          # basic-auth credential would leave the cluster on every page load.
+          # Same strip on /demi-search/config: eagle-public boots off it, so a forwarded dev/test
+          # credential would leave the cluster on every page load.
           demi_config_block=$(awk '/^  location = \/demi-search\/config \{/{f=1} f{print} f && /^  \}/{exit}' conf.d/server.conf.tmpl)
           [ -n "$demi_config_block" ] \
             || { echo "Error: location = /demi-search/config is missing from server.conf.tmpl"; exit 1; }
@@ -65,13 +57,8 @@ jobs:
 
           echo "✓ nginx config template validation passed"
 
-      # The grep above cannot tell a valid config from one that will not start. envsubst turns an
-      # empty ${VAR} into `proxy_pass ;`, which is [emerg], and conf.d is included into http {} — so
-      # the whole reverse proxy crash-loops for that environment. Without this step that surfaces as
-      # a five-minute `helm --wait` timeout after merge, not as a failed check here.
-      #
-      # Upstreams are pointed at 127.0.0.1 because nginx resolves every proxy_pass host at config
-      # load and cluster Service names do not resolve on a runner.
+      # An empty variable renders `proxy_pass ;`, an [emerg] the grep above cannot see. Upstreams map
+      # to 127.0.0.1 because nginx resolves proxy_pass hosts at load and cluster names fail on a runner.
       - name: nginx -t on the rendered template
         run: |
           render_and_test() {
@@ -100,36 +87,21 @@ jobs:
                 nginx -t'
           }
 
-          # Both shapes an environment can render: real https upstreams, and the localhost
-          # sentinel that stands in where the service does not exist. SEARCH and DEMI take the
-          # same two shapes and are varied together — only test has both, dev and prod render
-          # the sentinel for at least one of them. ANALYTICS varies the same way: every environment
-          # renders an https gateway host, the only shape that reaches the `proxy_ssl_server_name`
-          # path, and the second call renders the sentinel an unset value falls back to.
-          #
-          # The host is pinned to 127.0.0.1 like every other upstream here, and is deliberately
-          # not a real one. nginx resolves each proxy_pass host at config load, so naming a live
-          # Azure App Service made this step fail the day that estate was torn down (#30) — on
-          # every branch, for a reason no PR had introduced. What is under test is that the
-          # template renders and parses, not that somebody else's DNS still answers.
+          # Both shapes an upstream can render: an https host, the only one reaching proxy_ssl_server_name,
+          # and the localhost sentinel. Hosts are fake, pinned to 127.0.0.1: this tests the template, not DNS.
           render_and_test "https://eagle-search.example.test" "https://demi-api.example.test" \
             "https://demi-apim.example.test"
           render_and_test "http://localhost:9999" "http://localhost:9999" \
             "http://localhost:9999"
           echo "✓ rendered config passes nginx -t"
 
-      # nginx -t proves the config PARSES. It does not prove the auth directive is still in it.
-      # Deleting the single ${HTTP_BASIC} line from `location /` leaves every step above green,
-      # and since /public and /lib now fall through to that block, one deleted line un-gates three
-      # paths in dev and test instead of one. So: start the dev shape and demand a 401.
+      # nginx -t proves the config parses, not that the auth directive is still in it: start the dev
+      # shape and demand a 401.
       - name: The root location is auth-gated when a directive is supplied
         run: |
           set -euo pipefail
-          # The REAL image, not nginx:1.27-alpine with the script mounted in. generate-htpasswd.sh
-          # needs openssl, which the Dockerfile installs and the stock image does not have — mount
-          # it into the stock image and generation silently fails, nginx cannot read the htpasswd
-          # file, and every authenticated request 403s. That still satisfies a naive "not 401"
-          # assertion, so the check would pass on completely broken auth wiring.
+          # The real image, not the stock one: generate-htpasswd.sh needs openssl, and without it every
+          # authenticated request 403s, which a "not 401" check would pass.
           docker build -q -t rproxy:authcheck . >/dev/null
           docker run -d --name authcheck -p 18085:8080 \
             --add-host eagle-public:127.0.0.1 --add-host eagle-api:127.0.0.1 \
@@ -152,47 +124,25 @@ jobs:
             rproxy:authcheck
           for i in $(seq 20); do
             [ "$(docker inspect -f '{{.State.Running}}' authcheck)" = true ] || break
-            # NOT /nginx_status: it is gated `allow 10.0.0.0/8; allow 127.0.0.1; deny all`, and a
-            # request through `-p` arrives from the bridge gateway (172.17.0.1), so every poll 403s,
-            # `curl -sf` fails, and the loop runs all 20 sleeps without ever detecting readiness.
-            # Any status at all off `/` means nginx is answering; 401 is the expected one here.
+            # Not /nginx_status: `-p` requests arrive from the bridge gateway, which its allow list 403s.
+            # Any status off `/` means nginx is answering.
             [ "$(curl -s -o /dev/null -w '%{http_code}' http://localhost:18085/)" != 000 ] && break
             sleep 1
           done
           rc=0
-          # ALL THREE PATHS, not just `/`. This diff deleted the `location /public` and `location
-          # /lib` blocks, so those two are now gated only by falling through to `location /` — they
-          # are exactly the paths whose gating became implicit, and `/` is the one path that
-          # structurally always carries the directive. Asserting `/` alone would stay green if a
-          # future `location /public` were re-added without ${HTTP_BASIC}, which is the regression
-          # this step exists to catch.
-          #
-          # /demi-search/search is here for the same reason and is the newest instance of it: it is
-          # an exact-match location with its own ${HTTP_BASIC}, so nothing structural keeps it gated
-          # — delete that one line and it becomes an anonymous internet-reachable proxy onto
-          # demi-api while every page around it stays behind auth. DEMI points at the same dead
-          # port as ROOT here, so the authenticated 502 assertion below reads identically for it.
+          # Every path, not just `/`: /public and /lib are gated only by falling through to `location /`,
+          # and the exact-match /demi-* locations each carry their own auth line.
           for p in / /public /lib /demi-search/search /demi-search/config /demi-search/bulk-downloads /demi-search/bulk-downloads/z /demi-projects/000000000000000000000000; do
             anon=$(curl -s -o /dev/null -w '%{http_code}' "http://localhost:18085$p")
             auth=$(curl -s -u ci:ci-secret -o /dev/null -w '%{http_code}' "http://localhost:18085$p")
             echo "  anonymous $p -> $anon ; authenticated $p -> $auth"
             [ "$anon" = 401 ] || { echo "::error::$p served $anon anonymously; the auth directive is gone"; rc=1; }
-            # Exactly 502, nothing looser. ROOT points at a closed port, so a request that reaches
-            # the proxy_pass can only fail to connect — which proves the credential was accepted AND
-            # that the request got past the auth phase. 401/403 mean auth rejected it (403
-            # specifically = nginx could not read the htpasswd file), and a "not 401" assertion
-            # would pass on that.
+            # Exactly 502: the upstreams are closed ports, so only a request past the auth phase gets it.
+            # 401 or 403 mean auth rejected it (403 = nginx could not read the htpasswd file).
             [ "$auth" = 502 ] || { echo "::error::$p with valid credentials got $auth, expected 502 from the dead upstream — auth is not accepting them"; rc=1; }
           done
-          # THE EXACT MATCH IS A SECURITY CONTROL AND NOTHING ABOVE ASSERTS IT. Relaxing
-          # `location = /demi-search/search` to a `^~` prefix leaves every gate in this file green,
-          # while demi-api starts receiving /api/documents?pageSize=1000, /api/projects,
-          # /api/api-docs and /api/boundaries — its whole route table, anonymously, on a gov.bc.ca
-          # origin. Changing the upstream path stays green too, so nothing asserted routing at all.
-          #
-          # Status cannot discriminate: both upstreams are dead, so everything is 502. The
-          # discriminator is WHICH upstream nginx tried, read out of the error log — ROOT is
-          # 127.0.0.1:9 and DEMI is 127.0.0.1:9999, deliberately different ports.
+          # `location = /demi-search/search` must stay exact or demi-api's whole route table opens. Status
+          # cannot show it (all 502); the error log names the upstream tried: ROOT is port 9, DEMI 9999.
           for p in /demi-search/documents /demi-search/projects /demi-search/api-docs /demi-search/boundaries /demi-search/ /demi-search/search/ \
                    /demi-projects /demi-projects/ /demi-projects/notanobjectid /demi-projects/000000000000000000000000/documents; do
             curl -sg -u ci:ci-secret -o /dev/null "http://localhost:18085$p"
@@ -201,32 +151,18 @@ jobs:
           # for everything else, and the upstream-path count below proves it never got proxied.
           m=$(curl -sg -X POST -u ci:ci-secret -o /dev/null -w '%{http_code}' "http://localhost:18085/demi-projects/000000000000000000000000")
           [ "$m" = 403 ] || { echo "::error::POST /demi-projects/<id> got $m, expected 403 — limit_except GET is gone"; rc=1; }
-          # A non-ObjectId path must dead-end at 404, not fall through to `location /` — that would
-          # proxy back to Front Door, and Front Door forwards /demi-projects/* right back here, an
-          # infinite loop in production that only ends in a 504.
+          # A non-ObjectId path must 404, not fall to `location /`, which loops via Front Door to a 504.
           nf=$(curl -sg -u ci:ci-secret -o /dev/null -w '%{http_code}' "http://localhost:18085/demi-projects/notanobjectid")
           [ "$nf" = 404 ] || { echo "::error::GET /demi-projects/notanobjectid got $nf, expected 404 — the terminator location is gone"; rc=1; }
           curl -sg -u ci:ci-secret -o /dev/null "http://localhost:18085/demi-search/search?dataset=Project"
-          # Match every form nginx logs for the demi upstream: a resolved address on the first try
-          # (127.0.0.1:9999 or [::1]:9999) and the bare hostname it prints for "no live upstreams",
-          # which is what a worker logs for any later request inside the 10 s fail_timeout after a
-          # refused connect. Keying on one form made the count depend on which worker took the
-          # request. Paths only, query string dropped — ROOT is 127.0.0.1:9 and never matches.
+          # Match every form nginx logs for the demi upstream: an address on the first try, and the bare
+          # host it prints for "no live upstreams" inside fail_timeout. ROOT on port 9 never matches.
           demi_hits=$(docker logs authcheck 2>&1 \
             | sed -nE 's#.*upstream: "http://(127\.0\.0\.1:9999|\[::1\]:9999|localhost)(/[^"?]*)[^"]*".*#\2#p' \
             | sort -u)
           echo "$demi_hits"
-          # Exactly five upstream URIs may ever be reached: /api/search and /api/config/public from
-          # the two exact-match locations, /api/bulk-downloads plus /api/bulk-downloads/z from the
-          # bulk-downloads prefix location, and one /api/projects/<ObjectId> from the /demi-projects
-          # regex (all probed by the loops above). Anything else means a location widened and
-          # demi-api's route table is reachable anonymously — including a bare /api/projects, its
-          # list route, which the /demi-projects probes deliberately try to provoke.
-          #
-          # /api/config/public is spelled out rather than counted: /demi-search/config landing on
-          # demi-api's /api/config instead would serve eagle-public demi-admin's config document,
-          # which carries none of the public keys and no ACCESS_GATE — the curtain opens on a typo
-          # no status code can see.
+          # Exactly these five upstream URIs; any other means a location widened. /api/config/public is
+          # named: /api/config would serve a config document with no public keys and no ACCESS_GATE.
           [ "$(echo "$demi_hits" | grep -c .)" = 5 ] \
             || { echo "::error::unexpected set of upstream paths reached demi-api — a location is wider than intended"; rc=1; }
           for u in /api/search /api/config/public /api/bulk-downloads /api/bulk-downloads/z /api/projects/000000000000000000000000; do
@@ -241,20 +177,8 @@ jobs:
           docker logs authcheck 2>&1 | grep -q 'request: "GET /s/projects [^"]*", upstream: "http://[^"]*/api/s/projects"' \
             || { echo "::error::/s/projects did not reach demi-api as /api/s/projects — the /s/ prefix is being stripped"; rc=1; }
 
-          # THE CREDENTIAL STRIP, asserted rather than assumed. `location /` sends
-          # `proxy_set_header Authorization ""` so the shared dev/test basic-auth credential does not
-          # leave the cluster to the Front Door upstream. Deleting that line leaves every assertion
-          # above byte-identical — they all read status codes, and the header is invisible to them.
-          #
-          # So this uses a REPORTING upstream instead of a dead port: a one-shot listener that writes
-          # the request it received. `--network host` puts nginx in the runner's netns, so
-          # 127.0.0.1:19099 reaches it.
-          #
-          # `nc -l` serves exactly ONE connection, so every probe below starts its own listener
-          # immediately before its request — never before the readiness loop, which would spend the
-          # listener or let `timeout` expire while nginx was still booting. The bind is waited for,
-          # not slept on: a probe that arrives first gets a refused connect and reads as a strip
-          # that cannot be measured.
+          # Authorization strip on `location /`, read off a reporting upstream: status codes cannot see it.
+          # `nc -l` serves one connection, so each listener starts just before its request, bind awaited.
           start_upstream() {  # $1 = port, $2 = file to write the request it receives to
             : > "$2"
             ( printf 'HTTP/1.1 204 No Content\r\nConnection: close\r\n\r\n' | timeout 30 nc -l -p "$1" > "$2" ) &
@@ -262,9 +186,7 @@ jobs:
             timeout 10 sh -c "until ss -ltn 2>/dev/null | grep -q ':$1 '; do sleep 0.2; done" \
               || { echo "::error::the reporting upstream on port $1 never started listening — fix this check rather than trusting it"; rc=1; }
           }
-          # The analytics gateway reports on port 19098, because which upstream answered is only
-          # visible as which port received the request. The bare /analytics URL must reach no
-          # upstream at all.
+          # The analytics gateway reports on 19098: the port that got the request shows which upstream.
           docker run -d --name authstrip --network host \
             -e NGINX__EPIC__SERVER_NAME=localhost \
             -e NGINX__AJAX__SERVER_NAME=ajax.localhost -e NGINX__AJAX__REDIRECT=localhost/x \
@@ -278,10 +200,8 @@ jobs:
             -e HTTP_BASIC1= -e HTTP_BASIC2= \
             -e USERNAME=ci -e PASSWORD=ci-secret \
             rproxy:authcheck >/dev/null
-          # /nginx_status for readiness, not `/`: it answers from nginx itself, so it cannot spend a
-          # reporting listener, and `--network host` makes the request arrive from 127.0.0.1, which
-          # its `allow 127.0.0.1` admits. (The other step polls `/` because `-p` makes requests
-          # arrive from the bridge gateway and every /nginx_status poll 403s there.)
+          # /nginx_status for readiness: it cannot spend a listener, and with `--network host` requests come
+          # from 127.0.0.1, which its allow list admits.
           for i in $(seq 1 20); do
             [ "$(curl -s -o /dev/null -w '%{http_code}' http://localhost:8080/nginx_status 2>/dev/null)" = 200 ] && break
             sleep 1
@@ -291,24 +211,18 @@ jobs:
           curl -s -o /dev/null -u ci:ci-secret http://localhost:8080/ || true
           wait $upstream_pid 2>/dev/null || true
 
-          # The bare /analytics URL, the shape cached bundles still POST: 410, served by nginx, no
-          # upstream at all. penguin-analytics is uninstalled, so anything that proxies here again
-          # would answer 204 off the 19098 listener or 502 off a missing Service instead.
+          # Bare /analytics, still POSTed by cached bundles: nginx answers 410 and proxies nothing.
           gone=$(curl -s -o /dev/null -w '%{http_code}' -X POST -u ci:ci-secret http://localhost:8080/analytics)
           [ "$gone" = 410 ] || { echo "::error::POST /analytics answered $gone, expected 410 — the retired bare ingest URL is being proxied somewhere again"; rc=1; }
           echo "  POST /analytics -> $gone"
 
-          # The pre-v2.4.1 alias is an internal rewrite onto the block above, so it answers the same
-          # 410. A 502 here means it fell through to `location /api` and reached eagle-api.
+          # /api/analytics rewrites onto the block above; a 502 means it fell through to eagle-api.
           alias=$(curl -s -o /dev/null -w '%{http_code}' -X POST -u ci:ci-secret http://localhost:8080/api/analytics)
           [ "$alias" = 410 ] || { echo "::error::POST /api/analytics answered $alias, expected 410 — the rewrite onto the bare /analytics block is gone"; rc=1; }
           echo "  POST /api/analytics -> $alias"
 
-          # The GC Notify webhook penguin served, probed with a bearer: 410 from nginx, before the
-          # access phase, so no credential is needed to assert it. eagle-analytics has no webhook
-          # route, so falling through to `^~ /analytics/` would send a same-origin credential out of
-          # the cluster to APIM; here that shows up as a non-410 from the 19098 upstream, which no
-          # listener is bound to yet.
+          # Retired GC Notify webhook: 410 before the access phase. Falling through to `^~ /analytics/`
+          # would send a same-origin credential to APIM, seen here as a non-410.
           hook=$(curl -s -o /dev/null -w '%{http_code}' -X POST -H 'Authorization: Bearer ci-probe' \
             http://localhost:8080/analytics/webhook/gcnotify)
           [ "$hook" = 410 ] || { echo "::error::POST /analytics/webhook/gcnotify answered $hook, expected 410 — the retired webhook path is reaching the analytics gateway with its Authorization header"; rc=1; }
@@ -321,30 +235,21 @@ jobs:
           [ "$bare" = 410 ] || { echo "::error::POST /analytics/webhook answered $bare, expected 410 — the slash-less webhook path is reaching the analytics gateway with its Authorization header"; rc=1; }
           echo "  POST /analytics/webhook -> $bare"
 
-          # The new API's ingest path. A bearer, because that is the header that must not survive:
-          # eagle-admin attaches its Keycloak token to same-origin XHRs, and this upstream is an
-          # APIM gateway outside the cluster in dev and test. Basic would prove the same thing,
-          # so -u is left out to keep the failure message unambiguous.
+          # A bearer, the header that must not survive: eagle-admin attaches its Keycloak token to
+          # same-origin XHRs, and this upstream is APIM outside the cluster.
           start_upstream 19098 /tmp/upstream-events.txt
           curl -s -o /dev/null -X POST -H 'Authorization: Bearer ci-probe-token' \
             http://localhost:8080/analytics/events || true
           wait $upstream_pid 2>/dev/null || true
 
-          # The staff reporting path, where the bearer IS the authorization eagle-analytics
-          # enforces. Stripping it here would 401 every dashboard, and no status-code assertion in
-          # this file would notice — both upstreams answer 204.
+          # Reporting path: the bearer is eagle-analytics' authorization, so it must survive.
           start_upstream 19098 /tmp/upstream-query.txt
           curl -s -o /dev/null -X POST -H 'Authorization: Bearer ci-probe-token' \
             http://localhost:8080/analytics/query || true
           wait $upstream_pid 2>/dev/null || true
 
-          # THE BROWSER-FACING PREFIX. The frontends call /api/usage/… because ad blockers drop any
-          # request whose URL contains "analytics" before it leaves the page (ERR_BLOCKED_BY_CLIENT
-          # on eagle-admin test, 2026-09-06). nginx rewrites the prefix back to /analytics/… so the
-          # gateway is unchanged, which means the /analytics probes above stay green even if the new
-          # prefix is deleted, misrewritten, or falls through to `location /api` and reaches
-          # eagle-api instead. Both shapes are probed for that reason: ingest, which must lose the
-          # credential, and a sibling path, which must keep it.
+          # Browser-facing /api/usage/ prefix (ad blockers drop URLs containing "analytics"), rewritten
+          # to /analytics/. Probe ingest, which must lose the credential, and a sibling that keeps it.
           start_upstream 19098 /tmp/upstream-usage-events.txt
           curl -s -o /dev/null -X POST -H 'Authorization: Bearer ci-probe-token' \
             http://localhost:8080/api/usage/events || true
@@ -355,12 +260,8 @@ jobs:
             http://localhost:8080/api/usage/query || true
           wait $upstream_pid 2>/dev/null || true
 
-          # THE SAME STRIP ON EVERY DEMI LOCATION, which until now nothing asserted: the only
-          # reporting probe was `location /`, so deleting proxy_set_header Authorization "" from any
-          # of these left every check green while the shared dev/test basic-auth credential reached
-          # demi-api — where it also fires the forged-credential path on each legitimate request.
-          # Each path is checked for the upstream URI as well, so a widened location cannot pass by
-          # arriving somewhere else with no header.
+          # Same strip on every demi location; a forwarded credential also trips demi-api's forged-
+          # credential path. The upstream URI is checked too, so a widened location cannot pass.
           while read -r path upstream_path; do
             start_upstream 19096 /tmp/upstream-demi.txt
             curl -sg -o /dev/null -u ci:ci-secret "http://localhost:8080$path" || true
@@ -398,9 +299,8 @@ jobs:
             || { echo "::error::POST /analytics/query lost its Authorization header — the strip belongs on /analytics/events only, and eagle-analytics authorizes the reporting screens on that bearer"; rc=1; }
           echo "  POST /analytics/query -> gateway upstream saw: $(head -1 /tmp/upstream-query.txt | tr -d '\r')"
 
-          # The upstream URI is what proves the rewrite: an /api/usage request that arrived as
-          # /api/usage/events would mean proxy_pass lost its URI part, and one that never arrived at
-          # all means the prefix is gone and eagle-api answered.
+          # The upstream URI proves the rewrite: no /analytics/ path means proxy_pass lost its URI part;
+          # nothing arriving means eagle-api answered.
           grep -qi '^POST /analytics/events HTTP' /tmp/upstream-usage-events.txt \
             || { echo "::error::POST /api/usage/events did not reach the analytics gateway as /analytics/events — the browser-facing ingest prefix is unrouted, its proxy_pass URI is wrong, or the request fell through to location /api"; rc=1; }
           grep -qi '^authorization:' /tmp/upstream-usage-events.txt \
@@ -413,8 +313,8 @@ jobs:
             || { echo "::error::POST /api/usage/query lost its Authorization header — the strip belongs on /api/usage/events only, and eagle-analytics authorizes the reporting screens on that bearer"; rc=1; }
           echo "  POST /api/usage/query -> gateway upstream saw: $(head -1 /tmp/upstream-usage-query.txt | tr -d '\r')"
 
-          # Worker cap: `auto` means one worker per node core (32 on silver), the OOM kills behind the
-          # 2026-09-02 test 502s, and nginx -t and helm lint both stay green if it comes back.
+          # Worker cap: `auto` means one worker per node core (32 on silver), which OOMs, and nginx -t and
+          # helm lint stay green if it returns.
           workers=$(docker exec authcheck ps -o args | grep -c 'nginx: worker process' || true)
           [ "$workers" = 2 ] || { echo "::error::nginx.conf must keep worker_processes 2, saw $workers workers"; rc=1; }
           echo "  nginx workers: $workers"
@@ -423,29 +323,14 @@ jobs:
           docker rm -f authcheck >/dev/null
           exit $rc
 
-      # THE CHART MUST SATISFY EVERY DEPLOYABLE IMAGE, NOT JUST THIS COMMIT'S TEMPLATE.
-      # deploy-to-{test,prod}.yaml check out with no `ref:`, so they render the DEFAULT BRANCH's
-      # chart while `--set image.tag` selects an older image. If the chart stops supplying a
-      # variable a released template still expands, the entrypoint's envsubst leaves it as a
-      # literal, nginx parses it as a directive and refuses to start with `[emerg] unexpected "}"`.
-      # That breaks every deploy of, and rollback to, that tag. The `nginx -t` step above cannot
-      # catch it: it supplies its own env by hand rather than deriving it from the chart.
+      # Checks the chart against the template of every tag at or above MIN_TAG, not just this commit's:
+      # an unset variable stays literal and nginx will not start. The nginx -t step sets its own env.
       - name: Chart supplies every variable released templates expand
         run: |
           set -euo pipefail
           git fetch --tags --quiet --force
-          # A NAME IS NOT ALWAYS ENOUGH. Rendering `- name: X` with `value: ""` protects nothing
-          # where the variable sits INSIDE a directive: envsubst substitutes the empty string, so
-          # `proxy_pass ${X};` becomes `proxy_pass ;` and nginx refuses to start with [emerg].
-          # Where the variable IS the whole directive — ${HTTP_BASIC}, ${HTTP_BASIC1}, ${HTTP_BASIC2}
-          # — empty is legitimate and means "no auth here", which is exactly how prod renders them.
-          # So: every name must be present, and every upstream (NGINX__*PROXY__*) must also be
-          # non-empty.
-          # EVERY environment, not just prod. Rendering values-prod.yaml alone left the same
-          # [emerg] crash-loop shippable to dev and test: an upstream emptied in values-dev.yaml
-          # only is invisible to a prod render, and dev is where a broken rproxy is most likely to
-          # be introduced. Each env is rendered separately rather than intersected so the error can
-          # name the file to fix — "the chart is missing X" sends someone to the wrong values file.
+          # Every name must be present and every NGINX__*PROXY__* upstream non-empty (`proxy_pass ;` is
+          # [emerg]; empty HTTP_BASIC* means no auth). Envs render apart so an error names its file.
           ENVS="dev test prod"
           for e in $ENVS; do
             : > "/tmp/chart-env.$e.txt"; : > "/tmp/chart-nonempty.$e.txt"
@@ -463,23 +348,12 @@ jobs:
             sort -u -o "/tmp/chart-nonempty.$e.txt" "/tmp/chart-nonempty.$e.txt"
           done
           rc=0
-          # EVERY tag at or above MIN_TAG, not "the last N". An earlier version used `tail -6`,
-          # which silently excluded v2.7.6 — the one tag that actually fails this check — so the
-          # guard exited 0 on the case it exists to catch. A window defined by a magic number
-          # cannot be reasoned about; a floor with a stated reason can.
-          #
-          # MIN_TAG is v2.7.7 because v2.7.6 expands ${NGINX__EPIC__PROXY__TYPESENSE}, and the
-          # Typesense estate was deleted on 2026-08-21 — dev, test and prod. Rolling back to it
-          # would proxy at a service that no longer exists, so it is not a deployable target and
-          # the chart is not required to satisfy it.
+          # Every tag at or above MIN_TAG. v2.7.6 expands the Typesense variable and that service is
+          # gone, so it is not a deployable target.
           MIN_TAG=v2.7.7
           checked=0
-          # WORKING-TREE FIRST, then the released tags. Checking only released tags catches a
-          # variable REMOVED from the chart, but not one ADDED to the template — which is the
-          # commoner mistake: a developer adds `location /x { proxy_pass ${NGINX__..._X}; }` and
-          # forgets deployment.yaml. That passes every other check here and then the pod dies with
-          # `[emerg] unknown "nginx__..._x" variable`. HEAD's variable set being a subset of the
-          # released union is incidental today; it lapses the first time someone adds one.
+          # Working tree first: tags alone catch a variable removed from the chart, not one added to the
+          # template without deployment.yaml.
           for tag in WORKING_TREE $(git for-each-ref --format='%(refname:short)' refs/tags \
                         | grep -E '^v[0-9]+\.[0-9]+\.[0-9]+$' | sort -V \
                         | awk -v min="$MIN_TAG" 'min=="" || $0==min {p=1} p'); do
@@ -502,9 +376,8 @@ jobs:
             # would make the floor check below unreachable and silently revert it.
             [ "$tag" = WORKING_TREE ] || checked=$((checked + 1))
           done
-          # A floor that matches nothing checks nothing, prints nothing and exits 0 — the same
-          # silent pass this guard replaced. If MIN_TAG is ever deleted, retagged or mistyped, say
-          # so loudly instead.
+          # A floor that matches nothing checks nothing and exits 0; fail loudly if MIN_TAG is deleted,
+          # retagged or mistyped.
           if [ "$checked" -eq 0 ]; then
             echo "::error::no RELEASED tags at or above MIN_TAG=$MIN_TAG were examined — the guard checked only the working tree"
             exit 1
@@ -514,7 +387,6 @@ jobs:
 
       - name: Validate Helm chart
         run: |
-          # Check Helm chart structure
           if [ ! -f helm/rproxy/Chart.yaml ]; then
             echo "Error: helm/rproxy/Chart.yaml not found"
             exit 1
@@ -525,20 +397,17 @@ jobs:
             exit 1
           fi
           
-          # Lint Helm chart
           helm lint helm/rproxy
           
           echo "✓ Helm chart validation passed"
 
       - name: Validate Dockerfile
         run: |
-          # Check Dockerfile exists
           if [ ! -f Dockerfile ]; then
             echo "Error: Dockerfile not found"
             exit 1
           fi
           
-          # Check for required elements
           if ! grep -q "FROM nginx:1.27-alpine" Dockerfile; then
             echo "Error: Dockerfile must use nginx:1.27-alpine base image"
             exit 1
