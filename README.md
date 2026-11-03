@@ -1,6 +1,6 @@
 # eao-nginx (rproxy)
 
-Reverse proxy for the EPIC platform. Routes traffic between eagle-public, eagle-api and the analytics API.
+nginx reverse proxy that runs on the dev OpenShift namespace only. It carries no traffic on test or prod, and it is not part of local development: the frontends proxy from their own dev servers. See the **[Reverse Proxy Configuration](https://github.com/bcgov/eagle-dev-guides/wiki/Reverse-Proxy-Configuration)** wiki page.
 
 ## Documentation
 
